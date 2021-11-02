@@ -133,17 +133,22 @@ async fn async_main() {
         // }
     
         let cpu_usages = get_cpu_stats(&sys);
-        cpu_vec.push(cpu_usages[4]);
-        if cpu_vec.len() > term_size.0.into() {
-            cpu_vec.remove(0);
+        // cpu_vec.push(cpu_usages[4]);
+        // if cpu_vec.len() > term_size.0.into() {
+        //     cpu_vec.remove(0);
+        // }
+        for i in 0..cpu_usages.len() {
+            execute!(stdout(), Clear(CurrentLine)).ok();
+            print!("CPU {}:", i);
+            for j in i.to_string().len()..4 {
+                print!(" ");
+            }
+            print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
+            println!("");
+            execute!(stdout(), Clear(CurrentLine)).ok();
+            println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
         }
-        execute!(stdout(), Clear(CurrentLine)).ok();
-        print!("CPU: ");
-        print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[4]);
-        println!("");
-        execute!(stdout(), Clear(CurrentLine)).ok();
-        println!("Load: {:.2}%", 100_f32 - &cpu_usages[4]);
-        print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
+        //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
     }
 }
 
@@ -202,25 +207,29 @@ fn print_bar(max_width: u16, percentage: f32) {
     }
 }
 
-/// Fetches the current cpu usage of the system
+/// Fetches the current cpu usage of the system, the first index is the cpu core and the second is the exact usage
 /// ### Arguments
 /// * `system` - The reference to the System
 /// ### Returns
-/// * `vec[0]` - User cpu usage
-/// * `vec[1]` - Nice cpu usage
-/// * `vec[2]` - System cpu usage
-/// * `vec[3]` - Interrupt cpu usage
-/// * `vec[4]` - Idle percentage (100_f32 - vec[4] = total cpu usage)
-fn get_cpu_stats(system: &System) -> std::vec::Vec<f32> {
+/// * `vec[0][0]` - User cpu usage
+/// * `vec[0][1]` - Nice cpu usage
+/// * `vec[0][2]` - System cpu usage
+/// * `vec[0][3]` - Interrupt cpu usage
+/// * `vec[0][4]` - Idle percentage (100_f32 - vec[4] = total cpu usage)
+fn get_cpu_stats(system: &System) -> std::vec::Vec<std::vec::Vec<f32>> {
     // TODO: Handle error situation
     let mut vec = vec![];
-    let cpu_aggregate = system.cpu_load_aggregate().unwrap();
+    let cpu_aggregate = system.cpu_load().unwrap();
     thread::sleep(Duration::from_secs(1));
     let cpu = cpu_aggregate.done().unwrap();
-    vec.push(cpu.user * 100.0);
-    vec.push(cpu.nice * 100.0);
-    vec.push(cpu.system * 100.0);
-    vec.push(cpu.interrupt * 100.0);
-    vec.push(cpu.idle * 100.0);
+    for i in 0..cpu.len() {
+        let mut vec_vec = vec![];
+        vec_vec.push(cpu[i].user * 100.0);
+        vec_vec.push(cpu[i].nice * 100.0);
+        vec_vec.push(cpu[i].system * 100.0);
+        vec_vec.push(cpu[i].interrupt * 100.0);
+        vec_vec.push(cpu[i].idle * 100.0);
+        vec.push(vec_vec);
+    }
     return vec;
 }
