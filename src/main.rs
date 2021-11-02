@@ -1,18 +1,16 @@
 extern crate systemstat;
 
-use std::process;
 use std::thread;
 use std::time::Duration;
-use std::io::{stdout};
-
-use crossterm::terminal::ClearType::{CurrentLine};
-use crossterm::terminal::Clear;
+use std::io::{ stdout };
 
 use systemstat::{System, Platform};
 use futures::executor::block_on;
 
+use crossterm::terminal::{ Clear, ClearType::{ CurrentLine } };
+
 use crossterm::{
-    execute, Result,
+    execute,
     cursor::{ Hide, MoveTo }
 };
 
@@ -29,6 +27,7 @@ async fn async_main() {
     let sys = System::new();
     let mut term_size = crossterm::terminal::size().unwrap();
     let mut i: u16 = 0;
+    let mut cpu_vec: Vec<f32> = vec![];
     while i < term_size.1 {
         println!("");
         i += 1;
@@ -38,7 +37,7 @@ async fn async_main() {
         // Move and hide the cursor
         execute!(stdout(), MoveTo(0, 0)).ok();
         execute!(stdout(), Hide).ok();
-        clear_current_line().ok();
+        execute!(stdout(), Clear(CurrentLine)).ok();
         println!("RCTOP v{} [Width: {}, Height: {}]", VERSION, term_size.0, term_size.1);
         // match sys.mounts() {
         //     Ok(mounts) => {
@@ -134,12 +133,41 @@ async fn async_main() {
         // }
     
         let cpu_usages = get_cpu_stats(&sys);
-        clear_current_line().ok();
+        cpu_vec.push(cpu_usages[4]);
+        if cpu_vec.len() > term_size.0.into() {
+            cpu_vec.remove(0);
+        }
+        execute!(stdout(), Clear(CurrentLine)).ok();
         print!("CPU: ");
         print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[4]);
         println!("");
-        clear_current_line().ok();
+        execute!(stdout(), Clear(CurrentLine)).ok();
         println!("Load: {:.2}%", 100_f32 - &cpu_usages[4]);
+        print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
+    }
+}
+
+fn print_graph_stats(cpu_vec: &std::vec::Vec<f32>, max_width: u16, max_height: u16, x_offset: u16, y_offset: u16) {
+    let mut index: usize = 0;
+    let length = cpu_vec.len();
+    for i in y_offset-max_height..y_offset {
+        execute!(stdout(), MoveTo(0, i)).ok();
+        execute!(stdout(), Clear(CurrentLine)).ok();
+    }
+    while index < max_width.into() && index < length {
+        let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
+        let floored: u16 = height as u16;
+        execute!(stdout(), MoveTo(x_offset - index as u16, y_offset - max_height + floored)).ok();
+        if (height - floored as f32) <= 0.33 {
+            print!("_");
+        }
+        else if (height - floored as f32) <= 0.66 {
+            print!("-");
+        }
+        else {
+            print!("¯");
+        }
+        index += 1;
     }
 }
 
@@ -172,11 +200,6 @@ fn print_bar(max_width: u16, percentage: f32) {
             print!("█");
         }
     }
-}
-
-fn clear_current_line() -> Result<()> {
-    execute!(stdout(), Clear(CurrentLine))?;
-    Ok(())
 }
 
 /// Fetches the current cpu usage of the system
