@@ -1,16 +1,17 @@
 extern crate systemstat;
 
-use serde_json::json;
-
 use std::thread;
 use std::time::Duration;
 use std::io::{stdout};
+
+use crossterm::terminal::ClearType::{CurrentLine};
+use crossterm::terminal::Clear;
 
 use systemstat::{System, Platform};
 use futures::executor::block_on;
 
 use crossterm::{
-    execute,
+    execute, Result,
     cursor::{ Hide, MoveTo }
 };
 
@@ -32,9 +33,10 @@ async fn async_main() {
     loop {
         term_size = crossterm::terminal::size().unwrap();
         // Move and hide the cursor
-        execute!(stdout(), MoveTo(0, 0));
-        execute!(stdout(), Hide);
-        println!("Width: {}, Height: {}", term_size.0, term_size.1);
+        execute!(stdout(), MoveTo(0, 0)).ok();
+        execute!(stdout(), Hide).ok();
+        clear_current_line().ok();
+        println!("RCTOP v0.1 [Width: {}, Height: {}]", term_size.0, term_size.1);
         // match sys.mounts() {
         //     Ok(mounts) => {
         //         println!("\nMounts:");
@@ -129,10 +131,12 @@ async fn async_main() {
         // }
     
         let cpu_usages = get_cpu_stats(&sys);
-        execute!(stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine));
+        clear_current_line().ok();
         print!("CPU: ");
-        print_bar(term_size.0 - 5, 100_f32 - cpu_usages[4]);
+        print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[4]);
         println!("");
+        clear_current_line().ok();
+        println!("Load: {}%", 100_f32 - &cpu_usages[4]);
     }
 }
 
@@ -148,6 +152,11 @@ fn print_bar(width: u16, percentage: f32) {
         print!("█");
         index = index + 1;
     }
+}
+
+fn clear_current_line() -> Result<()> {
+    execute!(stdout(), Clear(CurrentLine))?;
+    Ok(())
 }
 
 /// Fetches the current cpu usage of the system
