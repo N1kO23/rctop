@@ -8,10 +8,11 @@ use systemstat::{System, Platform};
 use futures::executor::block_on;
 
 use crossterm::terminal::{ Clear, ClearType::{ CurrentLine } };
+use crossterm::style::{SetForegroundColor, SetBackgroundColor, ResetColor, Color, Attribute};
 
 use crossterm::{
     execute,
-    cursor::{ Hide, MoveTo }
+    cursor::{ Hide, MoveTo, position }
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -19,6 +20,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The main function of the program
 fn main() {
     
+    // Move and hide the cursor
+    execute!(stdout(), Hide).ok();
     // Block main thread until process finishes
     block_on(async_main());
 }
@@ -27,18 +30,24 @@ async fn async_main() {
     let sys = System::new();
     let mut term_size = crossterm::terminal::size().unwrap();
     let mut i: u16 = 0;
-    let mut cpu_vec: Vec<f32> = vec![];
+    //let mut cpu_vec: Vec<f32> = vec![];
     while i < term_size.1 {
         println!("");
         i += 1;
     }
     loop {
         term_size = crossterm::terminal::size().unwrap();
-        // Move and hide the cursor
         execute!(stdout(), MoveTo(0, 0)).ok();
-        execute!(stdout(), Hide).ok();
         execute!(stdout(), Clear(CurrentLine)).ok();
-        println!("RCTOP v{} [Width: {}, Height: {}]", VERSION, term_size.0, term_size.1);
+        execute!(stdout(), SetBackgroundColor(Color::DarkCyan), SetForegroundColor(Color::DarkCyan)).ok();
+        for _i in 0..term_size.0 {
+            print!("█");
+        }
+        execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
+        execute!(stdout(), MoveTo(1, 0)).ok();
+        print!("RCTOP v{} [Width: {}, Height: {}]", VERSION, term_size.0, term_size.1);
+        execute!(stdout(), ResetColor).ok();
+        execute!(stdout(), MoveTo(0, 2)).ok();
         // match sys.mounts() {
         //     Ok(mounts) => {
         //         println!("\nMounts:");
@@ -137,18 +146,34 @@ async fn async_main() {
         // if cpu_vec.len() > term_size.0.into() {
         //     cpu_vec.remove(0);
         // }
+        let mut total_cpu: f32 = 0_f32;
         for i in 0..cpu_usages.len() {
             execute!(stdout(), Clear(CurrentLine)).ok();
             print!("CPU {}:", i);
-            for j in i.to_string().len()..4 {
+            for _j in i.to_string().len()..4 {
                 print!(" ");
             }
             print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
             println!("");
             execute!(stdout(), Clear(CurrentLine)).ok();
             //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
+
+            // Sum up the cpu usages
+            total_cpu += &cpu_usages[i][4];
         }
+        // Get total cpu usage by dividing with the core count
+        total_cpu = total_cpu / cpu_usages.len() as f32;
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
+        execute!(stdout(), MoveTo(0, term_size.1)).ok();
+        execute!(stdout(), Clear(CurrentLine)).ok();
+        execute!(stdout(), SetBackgroundColor(Color::DarkCyan), SetForegroundColor(Color::DarkCyan)).ok();
+        for _i in 0..term_size.0 {
+            print!("█");
+        }
+        execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
+        execute!(stdout(), MoveTo(1, term_size.1)).ok();
+        print!("CPU: {:.2}%", total_cpu);
+        execute!(stdout(), ResetColor).ok();
     }
 }
 
@@ -182,6 +207,7 @@ fn print_graph_stats(cpu_vec: &std::vec::Vec<f32>, max_width: u16, max_height: u
 /// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
 fn print_bar(max_width: u16, percentage: f32) {
+    execute!(stdout(), SetForegroundColor(Color::DarkGreen)).ok();
     let block_count = max_width as f32 / 100_f32 * percentage;
     let mut index: u16 = 0;
     let floored = block_count as u16;
@@ -205,6 +231,7 @@ fn print_bar(max_width: u16, percentage: f32) {
             print!("█");
         }
     }
+    execute!(stdout(), ResetColor).ok();
 }
 
 /// Fetches the current cpu usage of the system, the first index is the cpu core and the second is the exact usage
