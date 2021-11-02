@@ -146,7 +146,7 @@ async fn async_main() {
             print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
             println!("");
             execute!(stdout(), Clear(CurrentLine)).ok();
-            println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
+            //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
         }
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
     }
