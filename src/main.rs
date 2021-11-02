@@ -19,15 +19,14 @@ use crossterm::{
 fn main() -> Result<()> {
     execute!(stdout(), Hide);
     loop {
-        let term_size = crossterm::terminal::size().unwrap();
-        println!("Width: {}, Height: {}", term_size.0, term_size.1);
         block_on(async_main());
     }
 }
 
 async fn async_main() {
     let sys = System::new();
-
+    let term_size = crossterm::terminal::size().unwrap();
+    println!("Width: {}, Height: {}", term_size.0, term_size.1);
     match sys.mounts() {
         Ok(mounts) => {
             println!("\nMounts:");
@@ -121,6 +120,9 @@ async fn async_main() {
         Err(x) => println!("\nSystem socket statistics: error: {}", x.to_string())
     }
     let cpu_usages = get_cpu_stats(&sys);
+    print!("CPU: ");
+    print_bar(term_size.0, 100_f32 - cpu_usages[4]);
+    println!("");
     let json_payload = json!({
         "cpu": {
             "user": cpu_usages[0],
@@ -130,11 +132,25 @@ async fn async_main() {
             "idle": cpu_usages[4]
         }
     });
+    //println!("{}", json_payload);
+}
 
-    println!("{}", json_payload);
+/// Prints a bar that is as long as the percentage of the given terminal width
+/// ### Arguments
+///
+/// * `width` - The max width of the bar
+/// * `percentage` - The percentage of the max width the bar is going to be
+fn print_bar(width: u16, percentage: f32) {
+    let block_count = width as f32 / 100_f32 * percentage;
+    let mut index: u16 = 0;
+    while index < block_count as u16 {
+        print!("█");
+        index = index + 1;
+    }
 }
 
 fn get_cpu_stats(system: &System) -> std::vec::Vec<f32> {
+    // TODO: Handle error situation
     let mut vec = vec![];
     let cpu_aggregate = system.cpu_load_aggregate().unwrap();
     println!("\nMeasuring CPU load...");
