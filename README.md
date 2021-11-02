@@ -1,6 +1,6 @@
 # What is it?
 
-RCTOP is a simple system monitoring app that runs purely on terminal and doesn't feature GUI. Once can compare it to htop, but more stripped down. RCTOP is fully coded in Rust.
+RCTOP is a simple system monitoring app that runs purely on terminal and doesn't feature GUI. One can compare it to htop, but more stripped down. RCTOP is fully coded in Rust.
 
 ## Notable features
 
