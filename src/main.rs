@@ -1,5 +1,6 @@
 extern crate systemstat;
 
+use std::process;
 use std::thread;
 use std::time::Duration;
 use std::io::{stdout};
@@ -14,6 +15,8 @@ use crossterm::{
     execute, Result,
     cursor::{ Hide, MoveTo }
 };
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The main function of the program
 fn main() {
@@ -36,7 +39,7 @@ async fn async_main() {
         execute!(stdout(), MoveTo(0, 0)).ok();
         execute!(stdout(), Hide).ok();
         clear_current_line().ok();
-        println!("RCTOP v0.1 [Width: {}, Height: {}]", term_size.0, term_size.1);
+        println!("RCTOP v{} [Width: {}, Height: {}]", VERSION, term_size.0, term_size.1);
         // match sys.mounts() {
         //     Ok(mounts) => {
         //         println!("\nMounts:");
@@ -136,21 +139,36 @@ async fn async_main() {
         print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[4]);
         println!("");
         clear_current_line().ok();
-        println!("Load: {}%", 100_f32 - &cpu_usages[4]);
+        println!("Load: {:.2}%", 100_f32 - &cpu_usages[4]);
     }
 }
 
 /// Prints a bar that is as long as the percentage of the given terminal width
 /// ### Arguments
 ///
-/// * `width` - The max width of the bar
+/// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
-fn print_bar(width: u16, percentage: f32) {
-    let block_count = width as f32 / 100_f32 * percentage;
-    let mut index: u16 = 0;
-    while index < block_count as u16 {
+fn print_bar(max_width: u16, percentage: f32) {
+    let block_count = max_width as f32 / 100_f32 * percentage;
+    let mut index: u16 = 1;
+    let floored = block_count as u16;
+    // Print the full bars
+    while index < floored {
         print!("█");
         index = index + 1;
+    }
+    // Determine the last bar from decimal 
+    if (block_count - floored as f32) <= 0.25 {
+        print!("░");
+    }
+    else if (block_count - floored as f32) <= 0.5 {
+        print!("▒");
+    }
+    else if (block_count - floored as f32) <= 0.75 {
+        print!("▓");
+    }
+    else {
+        print!("█");
     }
 }
 
