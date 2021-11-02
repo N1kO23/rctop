@@ -150,7 +150,7 @@ async fn async_main() {
 /// * `percentage` - The percentage of the max width the bar is going to be
 fn print_bar(max_width: u16, percentage: f32) {
     let block_count = max_width as f32 / 100_f32 * percentage;
-    let mut index: u16 = 1;
+    let mut index: u16 = 0;
     let floored = block_count as u16;
     // Print the full bars
     while index < floored {
@@ -158,17 +158,19 @@ fn print_bar(max_width: u16, percentage: f32) {
         index = index + 1;
     }
     // Determine the last bar from decimal 
-    if (block_count - floored as f32) <= 0.25 {
-        print!("░");
-    }
-    else if (block_count - floored as f32) <= 0.5 {
-        print!("▒");
-    }
-    else if (block_count - floored as f32) <= 0.75 {
-        print!("▓");
-    }
-    else {
-        print!("█");
+    if floored != 100 {
+        if (block_count - floored as f32) <= 0.25 {
+            print!("░");
+        }
+        else if (block_count - floored as f32) <= 0.5 {
+            print!("▒");
+        }
+        else if (block_count - floored as f32) <= 0.75 {
+            print!("▓");
+        }
+        else {
+            print!("█");
+        }
     }
 }
 
