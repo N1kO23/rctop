@@ -1,25 +1,24 @@
 extern crate systemstat;
 
+use std::io::stdout;
 use std::thread;
 use std::time::Duration;
-use std::io::{ stdout };
 
-use systemstat::{System, Platform};
 use futures::executor::block_on;
+use systemstat::{saturating_sub_bytes, Platform, System};
 
-use crossterm::terminal::{ Clear, ClearType::{ CurrentLine } };
-use crossterm::style::{SetForegroundColor, SetBackgroundColor, ResetColor, Color, Attribute};
+use crossterm::style::{Attribute, Color, ResetColor, SetBackgroundColor, SetForegroundColor};
+use crossterm::terminal::{Clear, ClearType::CurrentLine};
 
 use crossterm::{
+    cursor::{position, Hide, MoveTo},
     execute,
-    cursor::{ Hide, MoveTo, position }
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The main function of the program
 fn main() {
-    
     // Move and hide the cursor
     execute!(stdout(), Hide).ok();
     // Block main thread until process finishes
@@ -39,13 +38,16 @@ async fn async_main() {
         term_size = crossterm::terminal::size().unwrap();
         execute!(stdout(), MoveTo(0, 0)).ok();
         execute!(stdout(), Clear(CurrentLine)).ok();
-        execute!(stdout(), SetBackgroundColor(Color::DarkCyan), SetForegroundColor(Color::DarkCyan)).ok();
+        execute!(stdout(), SetForegroundColor(Color::DarkCyan)).ok();
         for _i in 0..term_size.0 {
             print!("█");
         }
         execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
         execute!(stdout(), MoveTo(1, 0)).ok();
-        print!("RCTOP v{} [Width: {}, Height: {}]", VERSION, term_size.0, term_size.1);
+        print!(
+            "RCTOP v{} [Width: {}, Height: {}]",
+            VERSION, term_size.0, term_size.1
+        );
         execute!(stdout(), ResetColor).ok();
         execute!(stdout(), MoveTo(0, 2)).ok();
         // match sys.mounts() {
@@ -58,7 +60,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nMounts: error: {}", x)
         // }
-    
         // match sys.mount_at("/") {
         //     Ok(mount) => {
         //         println!("\nMount at /:");
@@ -67,7 +68,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nMount at /: error: {}", x)
         // }
-    
         // match sys.block_device_statistics() {
         //     Ok(stats) => {
         //         for blkstats in stats.values() {
@@ -76,7 +76,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nBlock statistics error: {}", x.to_string())
         // }
-    
         // match sys.networks() {
         //     Ok(netifs) => {
         //         println!("\nNetworks:");
@@ -86,7 +85,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nNetworks: error: {}", x)
         // }
-    
         // match sys.networks() {
         //     Ok(netifs) => {
         //         println!("\nNetwork interface statistics:");
@@ -96,7 +94,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nNetworks: error: {}", x)
         // }
-    
         // match sys.battery_life() {
         //     Ok(battery) =>
         //         print!("\nBattery: {}%, {}h{}m remaining",
@@ -105,96 +102,116 @@ async fn async_main() {
         //                battery.remaining_time.as_secs() % 60),
         //     Err(x) => print!("\nBattery: error: {}", x)
         // }
-        
         // match sys.on_ac_power() {
         //     Ok(power) => println!(", AC power: {}", power),
         //     Err(x) => println!(", AC power: error: {}", x)
         // }
-    
         // match sys.memory() {
         //     Ok(mem) => println!("\nMemory: {} used / {} ({} bytes) total ({:?})", saturating_sub_bytes(mem.total, mem.free), mem.total, mem.total.as_u64(), mem.platform_memory),
         //     Err(x) => println!("\nMemory: error: {}", x)
         // }
-    
         // match sys.load_average() {
         //     Ok(loadavg) => println!("\nLoad average: {} {} {}", loadavg.one, loadavg.five, loadavg.fifteen),
         //     Err(x) => println!("\nLoad average: error: {}", x)
         // }
-    
         // match sys.uptime() {
         //     Ok(uptime) => println!("\nUptime: {:?}", uptime),
         //     Err(x) => println!("\nUptime: error: {}", x)
         // }
-    
         // match sys.boot_time() {
         //     Ok(boot_time) => println!("\nBoot time: {}", boot_time),
         //     Err(x) => println!("\nBoot time: error: {}", x)
         // }
-    
         // match sys.cpu_temp() {
         //     Ok(cpu_temp) => println!("\nCPU temp: {}", cpu_temp),
         //     Err(x) => println!("\nCPU temp: {}", x)
         // }
-    
         // match sys.socket_stats() {
         //     Ok(stats) => println!("\nSystem socket statistics: {:?}", stats),
         //     Err(x) => println!("\nSystem socket statistics: error: {}", x.to_string())
         // }
-    
-        let cpu_usages = get_cpu_stats(&sys);
-        // cpu_vec.push(cpu_usages[4]);
-        // if cpu_vec.len() > term_size.0.into() {
-        //     cpu_vec.remove(0);
-        // }
-        let mut total_cpu: f32 = 0_f32;
-        for i in 0..cpu_usages.len() {
-            execute!(stdout(), Clear(CurrentLine)).ok();
-            print!("CPU {}:", i);
-            for _j in i.to_string().len()..4 {
-                print!(" ");
-            }
-            print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
-            println!("");
-            execute!(stdout(), Clear(CurrentLine)).ok();
-            //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
 
-            // Sum up the cpu usages
-            total_cpu += &cpu_usages[i][4];
+        // Total CPU usage is 0 at first in case of error
+        let mut total_cpu: f32 = 0_f32;
+        let mut memory = vec![0, 0];
+        // Fetches the CPU usage for each core and prints it
+        match get_cpu_stats(&sys) {
+            Ok(cpu_usages) => {
+                let cpu_count_string_length: usize = cpu_usages.len().to_string().len();
+                for i in 0..cpu_usages.len() {
+                    execute!(stdout(), Clear(CurrentLine)).ok();
+                    print!("CPU {}:", i);
+                    for _j in i.to_string().len()..cpu_count_string_length + 1 {
+                        print!(" ");
+                    }
+                    print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
+                    println!("");
+                    execute!(stdout(), Clear(CurrentLine)).ok();
+                    //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
+                    // Sum up the cpu usages
+                    total_cpu += &cpu_usages[i][4];
+                }
+                // Get total cpu usage by dividing with the core count
+                total_cpu = 100_f32 - total_cpu / cpu_usages.len() as f32;
+            }
+            Err(x) => print!("\nCPU usage: error: {}", x.to_string()),
         }
-        // Get total cpu usage by dividing with the core count
-        total_cpu = total_cpu / cpu_usages.len() as f32;
+        // Fetches the memory usage and prints it
+        match get_mem_size(&sys) {
+            Ok(mem_size) => {
+                memory = mem_size;
+                execute!(stdout(), Clear(CurrentLine)).ok();
+                print!("Memory: ");
+                print_bar(
+                    term_size.0 - 5,
+                    memory[1] as f32 / memory[0] as f32 * 100_f32,
+                );
+                println!("");
+            }
+            Err(x) => print!("\nMemory: error: {}", x.to_string()),
+        }
+
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
         execute!(stdout(), MoveTo(0, term_size.1)).ok();
         execute!(stdout(), Clear(CurrentLine)).ok();
-        execute!(stdout(), SetBackgroundColor(Color::DarkCyan), SetForegroundColor(Color::DarkCyan)).ok();
+        execute!(stdout(), SetForegroundColor(Color::DarkCyan)).ok();
         for _i in 0..term_size.0 {
             print!("█");
         }
         execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
         execute!(stdout(), MoveTo(1, term_size.1)).ok();
-        print!("CPU: {:.2}%", total_cpu);
+        print!("CPU: {:.2}% ", total_cpu);
+        print!("RAM: {} / {} ", memory[1], memory[0]);
         execute!(stdout(), ResetColor).ok();
     }
 }
 
-fn print_graph_stats(cpu_vec: &std::vec::Vec<f32>, max_width: u16, max_height: u16, x_offset: u16, y_offset: u16) {
+fn print_graph_stats(
+    cpu_vec: &std::vec::Vec<f32>,
+    max_width: u16,
+    max_height: u16,
+    x_offset: u16,
+    y_offset: u16,
+) {
     let mut index: usize = 0;
     let length = cpu_vec.len();
-    for i in y_offset-max_height..y_offset {
+    for i in y_offset - max_height..y_offset {
         execute!(stdout(), MoveTo(0, i)).ok();
         execute!(stdout(), Clear(CurrentLine)).ok();
     }
     while index < max_width.into() && index < length {
         let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
         let floored: u16 = height as u16;
-        execute!(stdout(), MoveTo(x_offset - index as u16, y_offset - max_height + floored)).ok();
+        execute!(
+            stdout(),
+            MoveTo(x_offset - index as u16, y_offset - max_height + floored)
+        )
+        .ok();
         if (height - floored as f32) <= 0.33 {
             print!("_");
-        }
-        else if (height - floored as f32) <= 0.66 {
+        } else if (height - floored as f32) <= 0.66 {
             print!("-");
-        }
-        else {
+        } else {
             print!("¯");
         }
         index += 1;
@@ -216,25 +233,23 @@ fn print_bar(max_width: u16, percentage: f32) {
         print!("█");
         index = index + 1;
     }
-    // Determine the last bar from decimal 
+    // Determine the last bar from decimal
     if floored != 100 {
         if (block_count - floored as f32) <= 0.25 {
             print!("░");
-        }
-        else if (block_count - floored as f32) <= 0.5 {
+        } else if (block_count - floored as f32) <= 0.5 {
             print!("▒");
-        }
-        else if (block_count - floored as f32) <= 0.75 {
+        } else if (block_count - floored as f32) <= 0.75 {
             print!("▓");
-        }
-        else {
+        } else {
             print!("█");
         }
     }
     execute!(stdout(), ResetColor).ok();
 }
 
-/// Fetches the current cpu usage of the system, the first index is the cpu core and the second is the exact usage
+/// Fetches the current cpu usage of the system or throws error if the fetch fails,
+/// the first index is the cpu core and the second is the exact usage
 /// ### Arguments
 /// * `system` - The reference to the System
 /// ### Returns
@@ -242,21 +257,53 @@ fn print_bar(max_width: u16, percentage: f32) {
 /// * `vec[0][1]` - Nice cpu usage
 /// * `vec[0][2]` - System cpu usage
 /// * `vec[0][3]` - Interrupt cpu usage
-/// * `vec[0][4]` - Idle percentage (100_f32 - vec[4] = total cpu usage)
-fn get_cpu_stats(system: &System) -> std::vec::Vec<std::vec::Vec<f32>> {
-    // TODO: Handle error situation
-    let mut vec = vec![];
-    let cpu_aggregate = system.cpu_load().unwrap();
-    thread::sleep(Duration::from_secs(1));
-    let cpu = cpu_aggregate.done().unwrap();
-    for i in 0..cpu.len() {
-        let mut vec_vec = vec![];
-        vec_vec.push(cpu[i].user * 100.0);
-        vec_vec.push(cpu[i].nice * 100.0);
-        vec_vec.push(cpu[i].system * 100.0);
-        vec_vec.push(cpu[i].interrupt * 100.0);
-        vec_vec.push(cpu[i].idle * 100.0);
-        vec.push(vec_vec);
+/// * `vec[0][4]` - Idle percentage (100_f32 - vec[0][4] = total cpu usage for core 0)
+fn get_cpu_stats(
+    system: &System,
+) -> Result<std::vec::Vec<std::vec::Vec<f32>>, Box<dyn std::error::Error>> {
+    let cpu_aggregate = system.cpu_load();
+    match cpu_aggregate {
+        Ok(cpu_agg) => {
+            let mut vec = vec![];
+            thread::sleep(Duration::from_secs(1));
+            let cpu = cpu_agg.done().unwrap();
+            for i in 0..cpu.len() {
+                let mut vec_vec = vec![];
+                vec_vec.push(cpu[i].user * 100.0);
+                vec_vec.push(cpu[i].nice * 100.0);
+                vec_vec.push(cpu[i].system * 100.0);
+                vec_vec.push(cpu[i].interrupt * 100.0);
+                vec_vec.push(cpu[i].idle * 100.0);
+                vec.push(vec_vec);
+            }
+            Ok(vec)
+        }
+        Err(x) => Err(Box::new(x)),
     }
-    return vec;
+}
+
+/// Fetches the current memory usage of the system or throws error if the fetch fails,
+/// the first index is the total memory and the second is the used memory
+/// ### Arguments
+/// * `system` - The reference to the System
+/// ### Returns
+/// * `vec[0]` - Total memory
+/// * `vec[1]` - Used memory
+fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
+    match system.memory() {
+        Ok(mem) => {
+            // println!(
+            //     "\nMemory: {} used / {} ({} bytes) total ({:?})",
+            //     saturating_sub_bytes(mem.total, mem.free),
+            //     mem.total,
+            //     mem.total.as_u64(),
+            //     mem.platform_memory
+            // )
+            let mut vec = vec![];
+            vec.push(mem.total.as_u64());
+            vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
+            Ok(vec)
+        }
+        Err(x) => Err(Box::new(x)),
+    }
 }
