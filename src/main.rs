@@ -5,6 +5,8 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
+use ctrlc;
+
 use futures::executor::block_on;
 use systemstat::{saturating_sub_bytes, Platform, System};
 
@@ -12,10 +14,10 @@ use crossterm::style::{Attribute, Color, ResetColor, SetBackgroundColor, SetFore
 use crossterm::terminal::{
     Clear,
     ClearType::{All, CurrentLine},
+    ScrollUp,
 };
-
 use crossterm::{
-    cursor::{position, Hide, MoveTo},
+    cursor::{position, Hide, MoveTo, Show},
     execute,
 };
 
@@ -33,7 +35,14 @@ async fn async_main() {
     let sys = System::new();
     let mut term_size = get_term_size();
     let mut i: u16 = 0;
-    //let mut cpu_vec: Vec<f32> = vec![];
+
+    ctrlc::set_handler(move || {
+        println!("Received Ctrl + C! Exiting...");
+        execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).ok();
+        process::exit(0);
+    })
+    .expect("Error setting Ctrl + C handler");
+
     while i < term_size.1 {
         println!("");
         i += 1;
@@ -44,20 +53,22 @@ async fn async_main() {
             term_size = temp_size;
             execute!(stdout(), Clear(All)).ok();
         }
-        execute!(stdout(), MoveTo(0, 0)).ok();
-        execute!(stdout(), Clear(CurrentLine)).ok();
-        execute!(stdout(), SetForegroundColor(Color::DarkCyan)).ok();
+        execute!(
+            stdout(),
+            MoveTo(0, 0),
+            Clear(CurrentLine),
+            SetBackgroundColor(Color::DarkCyan)
+        )
+        .ok();
         for _i in 0..term_size.0 {
-            print!("█");
+            print!(" ");
         }
-        execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
         execute!(stdout(), MoveTo(1, 0)).ok();
         print!(
             "RCTOP v{} [Width: {}, Height: {}]",
             VERSION, term_size.0, term_size.1
         );
-        execute!(stdout(), ResetColor).ok();
-        execute!(stdout(), MoveTo(0, 2)).ok();
+        execute!(stdout(), ResetColor, MoveTo(0, 2)).ok();
         // match sys.mounts() {
         //     Ok(mounts) => {
         //         println!("\nMounts:");
@@ -102,14 +113,6 @@ async fn async_main() {
         //     }
         //     Err(x) => println!("\nNetworks: error: {}", x)
         // }
-        // match sys.battery_life() {
-        //     Ok(battery) =>
-        //         print!("\nBattery: {}%, {}h{}m remaining",
-        //                battery.remaining_capacity*100.0,
-        //                battery.remaining_time.as_secs() / 3600,
-        //                battery.remaining_time.as_secs() % 60),
-        //     Err(x) => print!("\nBattery: error: {}", x)
-        // }
         // match sys.on_ac_power() {
         //     Ok(power) => println!(", AC power: {}", power),
         //     Err(x) => println!(", AC power: error: {}", x)
@@ -152,7 +155,11 @@ async fn async_main() {
                     for _j in i.to_string().len()..cpu_count_string_length + 1 {
                         print!(" ");
                     }
-                    print_bar(term_size.0 - 5, 100_f32 - &cpu_usages[i][4]);
+                    print_bar(
+                        term_size.0 - 5,
+                        100_f32 - &cpu_usages[i][4],
+                        Color::DarkGreen,
+                    );
                     println!("");
                     execute!(stdout(), Clear(CurrentLine)).ok();
                     //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
@@ -173,6 +180,7 @@ async fn async_main() {
                 print_bar(
                     term_size.0 - 5,
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
+                    Color::DarkYellow,
                 );
                 println!("");
                 execute!(stdout(), Clear(CurrentLine)).ok();
@@ -180,20 +188,33 @@ async fn async_main() {
                 print_bar(
                     term_size.0 - 5,
                     memory[3] as f32 / memory[2] as f32 * 100_f32,
+                    Color::DarkYellow,
                 );
                 println!("");
             }
             Err(x) => print!("\nMemory: error: {}", x.to_string()),
         }
+        match sys.battery_life() {
+            Ok(battery) => print!(
+                "\nBattery: {}%, {}h{}m remaining",
+                battery.remaining_capacity * 100.0,
+                battery.remaining_time.as_secs() / 3600,
+                battery.remaining_time.as_secs() % 60
+            ),
+            Err(x) => print!("\nBattery: error: {}", x),
+        }
 
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
-        execute!(stdout(), MoveTo(0, term_size.1)).ok();
-        execute!(stdout(), Clear(CurrentLine)).ok();
-        execute!(stdout(), SetForegroundColor(Color::DarkCyan)).ok();
+        execute!(
+            stdout(),
+            MoveTo(0, term_size.1),
+            Clear(CurrentLine),
+            SetBackgroundColor(Color::DarkCyan)
+        )
+        .ok();
         for _i in 0..term_size.0 {
-            print!("█");
+            print!(" ");
         }
-        execute!(stdout(), ResetColor, SetBackgroundColor(Color::DarkCyan)).ok();
         execute!(stdout(), MoveTo(1, term_size.1)).ok();
         print!("CPU: {:.2}% ", total_cpu);
         print!("RAM: {} / {} ", memory[1], memory[0]);
@@ -253,8 +274,8 @@ fn print_graph_stats(
 ///
 /// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
-fn print_bar(max_width: u16, percentage: f32) {
-    execute!(stdout(), SetForegroundColor(Color::DarkGreen)).ok();
+fn print_bar(max_width: u16, percentage: f32, color: Color) {
+    execute!(stdout(), SetForegroundColor(color)).ok();
     let block_count = max_width as f32 / 100_f32 * percentage;
     let mut index: u16 = 0;
     let floored = block_count as u16;
