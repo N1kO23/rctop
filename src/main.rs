@@ -1,6 +1,7 @@
 extern crate systemstat;
 
 use std::io::stdout;
+use std::process;
 use std::thread;
 use std::time::Duration;
 
@@ -8,7 +9,10 @@ use futures::executor::block_on;
 use systemstat::{saturating_sub_bytes, Platform, System};
 
 use crossterm::style::{Attribute, Color, ResetColor, SetBackgroundColor, SetForegroundColor};
-use crossterm::terminal::{Clear, ClearType::CurrentLine};
+use crossterm::terminal::{
+    Clear,
+    ClearType::{All, CurrentLine},
+};
 
 use crossterm::{
     cursor::{position, Hide, MoveTo},
@@ -27,7 +31,7 @@ fn main() {
 
 async fn async_main() {
     let sys = System::new();
-    let mut term_size = crossterm::terminal::size().unwrap();
+    let mut term_size = get_term_size();
     let mut i: u16 = 0;
     //let mut cpu_vec: Vec<f32> = vec![];
     while i < term_size.1 {
@@ -35,7 +39,11 @@ async fn async_main() {
         i += 1;
     }
     loop {
-        term_size = crossterm::terminal::size().unwrap();
+        let temp_size = get_term_size();
+        if temp_size.0 != term_size.0 || temp_size.1 != term_size.1 {
+            term_size = temp_size;
+            execute!(stdout(), Clear(All)).ok();
+        }
         execute!(stdout(), MoveTo(0, 0)).ok();
         execute!(stdout(), Clear(CurrentLine)).ok();
         execute!(stdout(), SetForegroundColor(Color::DarkCyan)).ok();
@@ -167,6 +175,13 @@ async fn async_main() {
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
                 );
                 println!("");
+                execute!(stdout(), Clear(CurrentLine)).ok();
+                print!("Swap: ");
+                print_bar(
+                    term_size.0 - 5,
+                    memory[3] as f32 / memory[2] as f32 * 100_f32,
+                );
+                println!("");
             }
             Err(x) => print!("\nMemory: error: {}", x.to_string()),
         }
@@ -183,6 +198,21 @@ async fn async_main() {
         print!("CPU: {:.2}% ", total_cpu);
         print!("RAM: {} / {} ", memory[1], memory[0]);
         execute!(stdout(), ResetColor).ok();
+    }
+}
+
+/// Returns the size of the terminal as a tuple of integers.
+/// First value is the width and the second value is the height
+fn get_term_size() -> (u16, u16) {
+    let term_size = crossterm::terminal::size();
+    match term_size {
+        Ok(size) => {
+            return size;
+        }
+        Err(e) => {
+            println!("Error while fetching terminal size: {}", e);
+            process::exit(1);
+        }
     }
 }
 
@@ -242,7 +272,7 @@ fn print_bar(max_width: u16, percentage: f32) {
         } else if (block_count - floored as f32) <= 0.75 {
             print!("▓");
         } else {
-            print!("█");
+            print!(" ");
         }
     }
     execute!(stdout(), ResetColor).ok();
@@ -289,19 +319,32 @@ fn get_cpu_stats(
 /// ### Returns
 /// * `vec[0]` - Total memory
 /// * `vec[1]` - Used memory
+/// * `vec[2]` - Total swap
+/// * `vec[3]` - Used swap
 fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
     match system.memory() {
         Ok(mem) => {
-            // println!(
-            //     "\nMemory: {} used / {} ({} bytes) total ({:?})",
-            //     saturating_sub_bytes(mem.total, mem.free),
-            //     mem.total,
-            //     mem.total.as_u64(),
-            //     mem.platform_memory
-            // )
+            println!(
+                "\nMemory: {} used / {} total ({:?})",
+                saturating_sub_bytes(mem.total, mem.free),
+                mem.total,
+                mem.platform_memory
+            );
             let mut vec = vec![];
             vec.push(mem.total.as_u64());
             vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
+            if mem.platform_memory.meminfo.contains_key("SwapTotal") {
+                match mem.platform_memory.meminfo.get("SwapTotal") {
+                    Some(x) => vec.push(x.as_u64()),
+                    None => (vec.push(0)),
+                }
+            }
+            if mem.platform_memory.meminfo.contains_key("SwapFree") {
+                match mem.platform_memory.meminfo.get("SwapFree") {
+                    Some(x) => vec.push(x.as_u64()),
+                    None => (vec.push(0)),
+                }
+            }
             Ok(vec)
         }
         Err(x) => Err(Box::new(x)),
