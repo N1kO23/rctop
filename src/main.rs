@@ -27,6 +27,16 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn main() {
     // Move and hide the cursor
     execute!(stdout(), Hide).ok();
+
+    std::thread::spawn(move || {
+        // Wait for Ctrl+C
+        ctrlc::set_handler(move || {
+            println!("Received Ctrl + C! Exiting...");
+            execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).ok();
+            process::exit(0);
+        })
+        .expect("Error setting Ctrl + C handler");
+    });
     // Block main thread until process finishes
     block_on(async_main());
 }
@@ -35,13 +45,6 @@ async fn async_main() {
     let sys = System::new();
     let mut term_size = get_term_size();
     let mut i: u16 = 0;
-
-    ctrlc::set_handler(move || {
-        println!("Received Ctrl + C! Exiting...");
-        execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).ok();
-        process::exit(0);
-    })
-    .expect("Error setting Ctrl + C handler");
 
     while i < term_size.1 {
         println!("");
@@ -183,14 +186,14 @@ async fn async_main() {
                     Color::DarkYellow,
                 );
                 println!("");
-                execute!(stdout(), Clear(CurrentLine)).ok();
-                print!("Swap: ");
-                print_bar(
-                    term_size.0 - 5,
-                    memory[3] as f32 / memory[2] as f32 * 100_f32,
-                    Color::DarkYellow,
-                );
-                println!("");
+                // execute!(stdout(), Clear(CurrentLine)).ok();
+                // print!("Swap: ");
+                // print_bar(
+                //     term_size.0 - 5,
+                //     memory[3] as f32 / memory[2] as f32 * 100_f32,
+                //     Color::DarkYellow,
+                // );
+                // println!("");
             }
             Err(x) => print!("\nMemory: error: {}", x.to_string()),
         }
@@ -354,18 +357,18 @@ fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::erro
             let mut vec = vec![];
             vec.push(mem.total.as_u64());
             vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
-            if mem.platform_memory.meminfo.contains_key("SwapTotal") {
-                match mem.platform_memory.meminfo.get("SwapTotal") {
-                    Some(x) => vec.push(x.as_u64()),
-                    None => (vec.push(0)),
-                }
-            }
-            if mem.platform_memory.meminfo.contains_key("SwapFree") {
-                match mem.platform_memory.meminfo.get("SwapFree") {
-                    Some(x) => vec.push(x.as_u64()),
-                    None => (vec.push(0)),
-                }
-            }
+            // if mem.platform_memory.meminfo.contains_key("SwapTotal") {
+            //     match mem.platform_memory.meminfo.get("SwapTotal") {
+            //         Some(x) => vec.push(x.as_u64()),
+            //         None => (vec.push(0)),
+            //     }
+            // }
+            // if mem.platform_memory.meminfo.contains_key("SwapFree") {
+            //     match mem.platform_memory.meminfo.get("SwapFree") {
+            //         Some(x) => vec.push(x.as_u64()),
+            //         None => (vec.push(0)),
+            //     }
+            // }
             Ok(vec)
         }
         Err(x) => Err(Box::new(x)),
