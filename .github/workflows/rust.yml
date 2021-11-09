@@ -56,7 +56,7 @@ jobs:
         path: target/release/rctop.exe
 
   build-macos:
-    name: "Compile for Macos"
+    name: "Compile for MacOS"
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
@@ -76,7 +76,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-linux, build-macos, build-windows]
     outputs:
-      version: ${{ steps.version.outputs.value }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       
@@ -134,5 +133,5 @@ jobs:
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: ${{matrix.targetPlatform}}_build/${{ matrix.targetPlatform == 'windows' && 'rctop.exe' || 'rctop' }}
-          asset_name: rctop.${{matrix.targetPlatform}}.v${{ needs.create-release.outputs.version }}
+          asset_name: rctop.${{matrix.targetPlatform}}
           asset_content_type: application/octet-stream
