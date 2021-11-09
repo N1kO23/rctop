@@ -81,8 +81,8 @@ jobs:
         with:
           draft: false
           prerelease: false
-          release_name: rctop v${{ env.VERSION }}
-          tag_name: v${{ env.VERSION }}
+          release_name: rctop v${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
