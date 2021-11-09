@@ -68,17 +68,17 @@ jobs:
       - name: Download Linux Binaries
         uses: actions/download-artifact@v2
         with:
-          name: rctop_compiled
+          name: rctop_compiled_linux
           path: linux_build
       - name: Download Windows Binaries
         uses: actions/download-artifact@v2
         with:
-          name: rctop_compiled
+          name: rctop_compiled_windows
           path: windows_build
       - name: Download Macos Binaries
         uses: actions/download-artifact@v2
         with:
-          name: rctop_compiled
+          name: rctop_compiled_macos
           path: macos_build
 
       # The release script that prepares a new Github release
@@ -116,7 +116,7 @@ jobs:
           asset_path: windows_build
           asset_name: rctop.windows.v${{ steps.version.outputs.version }}
           asset_content_type: application/octet-stream
-          
+
       - name: Upload Macos Artifact
         uses: actions/upload-release-asset@v1
         continue-on-error: true
