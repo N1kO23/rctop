@@ -104,7 +104,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          upload_url: ${{ create-release.outputs.upload_url }}
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: ${{matrix.targetPlatform}}_build/${{ matrix.targetPlatform == 'windows' && 'rctop.exe' || 'rctop' }}
-          asset_name: rctop.${{matrix.targetPlatform}}.v${{ create-release.outputs.version }}
+          asset_name: rctop.${{matrix.targetPlatform}}.v${{ needs.create-release.outputs.version }}
           asset_content_type: application/octet-stream
