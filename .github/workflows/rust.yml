@@ -7,7 +7,7 @@ env:
 
 jobs:
   build-linux:
-    name: "Compile for Ubuntu"
+    name: "Compile for Linux"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
