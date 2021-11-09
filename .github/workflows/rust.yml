@@ -4,8 +4,6 @@ on: [push, pull_request, workflow_dispatch]
 
 env:
   CARGO_TERM_COLOR: always
-  UPLOAD_URL: ""
-  VERSION: ""
 
 jobs:
   build-linux:
@@ -55,14 +53,18 @@ jobs:
     name: "Create Release"
     runs-on: ubuntu-latest
     needs: [build-linux, build-macos, build-windows]
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       
       # Yes we get the repo again but only for the version in the package.json
       - name: Checkout
         uses: actions/checkout@v2
       - name: Set Version Variable
+        id: version
         run: >
-          echo "::set-output name=VERSION::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
+          echo "::set-output name=value::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
 
       # Download the artifacts
       - name: Download ${{matrix.targetPlatform}} Binaries
@@ -83,8 +85,6 @@ jobs:
           tag_name: v${{ env.VERSION }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Set upload URL
-        run:  echo "::set-output name=UPLOAD_URL::${{steps.create_release.outputs.upload_url}}"
 
   upload: 
     name: "Upload Builds"
@@ -104,7 +104,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          upload_url: ${{ env.UPLOAD_URL }}
+          upload_url: ${{ create-release.outputs.upload_url }}
           asset_path: ${{matrix.targetPlatform}}_build/${{ matrix.targetPlatform == 'windows' && 'rctop.exe' || 'rctop' }}
-          asset_name: rctop.${{matrix.targetPlatform}}.v${{ env.VERSION }}
+          asset_name: rctop.${{matrix.targetPlatform}}.v${{ create-release.outputs.version }}
           asset_content_type: application/octet-stream
