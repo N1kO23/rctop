@@ -12,6 +12,9 @@ RCTOP is a simple WIP system monitoring app that runs purely on terminal and doe
 - Shows battery level, if supported
 - Shows CPU temps, if supported (not implemented yet)
 
+## Early version of the UI
+ ![Very early development UI](https://cdn.discordapp.com/attachments/881632596298170399/907643426873430057/unknown.png)
+
 # Installation
 
 To compile and run the program from source code, one needs to have Rust installed, it can be downloaded from [here](https://www.rust-lang.org/tools/install "Link to rust installer download page").
