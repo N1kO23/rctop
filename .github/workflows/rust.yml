@@ -21,6 +21,10 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install linker (multilib)
       run: "sudo apt install gcc-multilib -y"
+    - name: Install linker (mips)
+      run: "sudo apt install gcc-mips-linux-gnu -y"
+    - name: Install linker (mipsel)
+      run: "sudo apt install gcc-mipsel-linux-gnu -y"
     - name: Install linker (aarch64)
       run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Add Target

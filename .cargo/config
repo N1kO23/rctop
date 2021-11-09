@@ -4,3 +4,6 @@ linker = "aarch64-linux-gnu-gcc"
 
 [target.mips-unknown-linux-gnu]
 linker = "mips-linux-gnu-gcc"
+
+[target.mipsel-unknown-linux-gnu]
+linker = "mipsel-linux-gnu-gcc"
