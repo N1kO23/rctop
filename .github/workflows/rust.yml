@@ -7,62 +7,89 @@ env:
 
 
 jobs:
-  build:
+  build: 
+    name: Build for ${{ matrix.targetPlatform }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform:
+          - aarch64-unknown-linux-gnu	# ARM64 Linux (kernel 4.2, glibc 2.17+) 1
+          - i686-pc-windows-gnu	      # 32-bit MinGW (Windows 7+)
+          - i686-pc-windows-msvc	    # 32-bit MSVC (Windows 7+)
+          - i686-unknown-linux-gnu	  # 32-bit Linux (kernel 2.6.32+, glibc 2.11+)
+          - x86_64-apple-darwin	      # 64-bit macOS (10.7+, Lion+)
+          - x86_64-pc-windows-gnu	    # 64-bit MinGW (Windows 7+)
+          - x86_64-pc-windows-msvc	  # 64-bit MSVC (Windows 7+)
+          - x86_64-unknown-linux-gnu	# 64-bit Linux (kernel 2.6.32+, glibc 2.11+)
+
     steps:
     - uses: actions/checkout@v2
+    - name: Set Version Variable
+      run: >
+        echo "::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
+      id: version
+    - name: Install Target 
+      run: rustup target add ${{matrix.targetPlatform}}
+    - name: Install Toolchain
+      run: rustup toolchain install stable-${{matrix.targetPlatform}}
     - name: Build
-      run: cargo build --verbose --release;cp target/release/rctop .
+      run: cargo build --target ${{matrix.targetPlatform}} --verbose --release;cp target/release/rctop .
     - name: Run tests
       run: cargo test --verbose --release
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop_compiled
+        name: rctop_compiled_${{matrix.targetPlatform}}
         path: rctop
 
-  release:
-        name: "Release Build"
-        runs-on: ubuntu-latest
-        needs: build
-        steps:
-          
-          # Yes we get the repo again but only for the version in the package.json
-          - name: Checkout
-            uses: actions/checkout@v2
-          - name: Set Version Variable
-            run: >
-              echo "::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
-            id: version
+  # release:
+  #   name: Release for ${{ matrix.targetPlatform }}
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       targetPlatform:
+  #         - aarch64-unknown-linux-gnu	# ARM64 Linux (kernel 4.2, glibc 2.17+) 1
+  #         - i686-pc-windows-gnu	      # 32-bit MinGW (Windows 7+)
+  #         - i686-pc-windows-msvc	    # 32-bit MSVC (Windows 7+)
+  #         - i686-unknown-linux-gnu	  # 32-bit Linux (kernel 2.6.32+, glibc 2.11+)
+  #         - x86_64-apple-darwin	      # 64-bit macOS (10.7+, Lion+)
+  #         - x86_64-pc-windows-gnu	    # 64-bit MinGW (Windows 7+)
+  #         - x86_64-pc-windows-msvc	  # 64-bit MSVC (Windows 7+)
+  #         - x86_64-unknown-linux-gnu	# 64-bit Linux (kernel 2.6.32+, glibc 2.11+)
+      
+  #   needs: build
+  #   steps:
 
-          # Download the artifacts
-          - name: Download Binaries
-            uses: actions/download-artifact@v2
-            with:
-              name: rctop_compiled
-              path: build
+  #     # Download the artifacts
+  #     - name: Download Binaries
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: rctop_compiled
+  #         path: build
 
-          # The release script that prepares a new Github release
-          - name: Create Release
-            uses: actions/create-release@v1
-            id: create_release
-            continue-on-error: true
-            with:
-              draft: false
-              prerelease: false
-              release_name: rctop v${{ steps.version.outputs.version }}
-              tag_name: v${{ steps.version.outputs.version }}
-            env:
-              GITHUB_TOKEN: ${{ github.token }}
+  #     # The release script that prepares a new Github release
+  #     - name: Create Release
+  #       uses: actions/create-release@v1
+  #       id: create_release
+  #       continue-on-error: true
+  #       with:
+  #         draft: false
+  #         prerelease: false
+  #         release_name: rctop v${{ steps.version.outputs.version }}
+  #         tag_name: v${{ steps.version.outputs.version }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ github.token }}
 
-          # Upload artifacts to the release
-          - name: Upload Linux Artifact
-            uses: actions/upload-release-asset@v1
-            continue-on-error: true
-            env:
-              GITHUB_TOKEN: ${{ github.token }}
-            with:
-              upload_url: ${{ steps.create_release.outputs.upload_url }}
-              asset_path: ./build/rctop
-              asset_name: rctop.v${{ steps.version.outputs.version }}
-              asset_content_type: application/octet-stream
+  #     # Upload artifacts to the release
+  #     - name: Upload Linux Artifact
+  #       uses: actions/upload-release-asset@v1
+  #       continue-on-error: true
+  #       env:
+  #         GITHUB_TOKEN: ${{ github.token }}
+  #       with:
+  #         upload_url: ${{ steps.create_release.outputs.upload_url }}
+  #         asset_path: ./build/rctop
+  #         asset_name: rctop.v${{ steps.version.outputs.version }}
+  #         asset_content_type: application/octet-stream
