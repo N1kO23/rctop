@@ -102,10 +102,10 @@ jobs:
     strategy:
       matrix: 
        targetPlatform:
-          - windows
-          - linux
-          - linux_arm
+          - linux_aarch64
           - linux_i686
+          - linux_x86_64
+          - windows
           - macos
       fail-fast: false
     steps:
