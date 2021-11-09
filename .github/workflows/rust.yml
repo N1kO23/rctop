@@ -7,6 +7,7 @@ env:
 
 jobs:
   build-linux:
+    name: "Compile for Ubuntu"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -21,6 +22,7 @@ jobs:
         path: target/release/rctop
 
   build-windows:
+    name: "Compile for Windows"
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
@@ -35,6 +37,7 @@ jobs:
         path: target/release/rctop.exe
 
   build-macos:
+    name: "Compile for Macos"
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
