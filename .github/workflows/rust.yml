@@ -7,16 +7,8 @@ env:
 
 
 jobs:
-
-  build:
+  build-linux:
     runs-on: ubuntu-latest
-    strategy:
-      matrix: 
-        targetPlatform:
-          - windows
-          - linux
-          - macos
-      fail-fast: false
     steps:
     - uses: actions/checkout@v2
     - name: Build
@@ -26,13 +18,42 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop_compiled_${{matrix.targetPlatform}}
+        name: rctop_compiled_linux
         path: target/release/rctop
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rctop_compiled_windows
+        path: target/release/rctop.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rctop_compiled_macos
+        path: target/release/rctop
+    
 
   release:
     name: "Release Build"
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build-linux, build-macos, build-windows]
     strategy:
       matrix: 
        targetPlatform:
