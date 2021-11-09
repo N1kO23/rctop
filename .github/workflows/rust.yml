@@ -7,8 +7,16 @@ env:
 
 
 jobs:
-  build-linux:
+
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix: 
+        targetPlatform:
+          - windows
+          - linux
+          - macos
+      fail-fast: false
     steps:
     - uses: actions/checkout@v2
     - name: Build
@@ -18,42 +26,21 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop_compiled_linux
-        path: target/release/rctop
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose --release
-    - name: Run tests
-      run: cargo test --verbose --release
-    - name: Upload artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: rctop_compiled_windows
-        path: target/release/rctop.exe
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose --release
-    - name: Run tests
-      run: cargo test --verbose --release
-    - name: Upload artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: rctop_compiled_macos
-        path: target/release/rctop
-    
+        name: rctop_compiled_${{matrix.targetPlatform}}
+        path: target/release/*
 
   release:
     name: "Release Build"
     runs-on: ubuntu-latest
     needs: [build-linux, build-macos, build-windows]
+    strategy:
+      matrix: 
+       targetPlatform:
+          - windows
+          - linux
+          - macos
+      fail-fast: false
+
     steps:
       
       # Yes we get the repo again but only for the version in the package.json
@@ -65,21 +52,12 @@ jobs:
         id: version
 
       # Download the artifacts
-      - name: Download Linux Binaries
+      - name: Download ${{matrix.targetPlatform}} Binaries
         uses: actions/download-artifact@v2
         with:
-          name: rctop_compiled_linux
-          path: linux_build
-      - name: Download Windows Binaries
-        uses: actions/download-artifact@v2
-        with:
-          name: rctop_compiled_windows
-          path: windows_build
-      - name: Download Macos Binaries
-        uses: actions/download-artifact@v2
-        with:
-          name: rctop_compiled_macos
-          path: macos_build
+          name: rctop_compiled_${{matrix.targetPlatform}}
+          path: ${{matrix.targetPlatform}}_build
+      
 
       # The release script that prepares a new Github release
       - name: Create Release
@@ -95,35 +73,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       # Upload artifacts to the release
-      - name: Upload Linux Artifact
+      - name: Upload ${{matrix.targetPlatform}} Artifact
         uses: actions/upload-release-asset@v1
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: linux_build
-          asset_name: rctop.linux.v${{ steps.version.outputs.version }}
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows Artifact
-        uses: actions/upload-release-asset@v1
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: windows_build
-          asset_name: rctop.windows.v${{ steps.version.outputs.version }}
-          asset_content_type: application/octet-stream
-
-      - name: Upload Macos Artifact
-        uses: actions/upload-release-asset@v1
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: macos_build
-          asset_name: rctop.macos.v${{ steps.version.outputs.version }}
+          asset_path: ${{matrix.targetPlatform}}_build
+          asset_name: rctop.${{matrix.targetPlatform}}.v${{ steps.version.outputs.version }}
           asset_content_type: application/octet-stream
