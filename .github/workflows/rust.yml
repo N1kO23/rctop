@@ -65,14 +65,7 @@ jobs:
         id: version
         run: >
           echo "::set-output name=value::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
-
-      # Download the artifacts
-      - name: Download ${{matrix.targetPlatform}} Binaries
-        uses: actions/download-artifact@v2
-        with:
-          name: rctop_compiled_${{matrix.targetPlatform}}
-          path: ${{matrix.targetPlatform}}_build
-      
+     
       # The release script that prepares a new Github release
       - name: Create Release
         uses: actions/create-release@v1
@@ -98,6 +91,15 @@ jobs:
           - macos
       fail-fast: false
     steps:
+
+      # Download the artifacts
+      - name: Download ${{matrix.targetPlatform}} Binaries
+        uses: actions/download-artifact@v2
+        with:
+          name: rctop_compiled_${{matrix.targetPlatform}}
+          path: ${{matrix.targetPlatform}}_build
+
+      # Upload Release
       - name: Upload ${{matrix.targetPlatform}} Artifact
         uses: actions/upload-release-asset@v1
         continue-on-error: true
