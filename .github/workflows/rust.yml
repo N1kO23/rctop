@@ -5,64 +5,111 @@ on: [push, pull_request, workflow_dispatch]
 env:
   CARGO_TERM_COLOR: always
 
-
 jobs:
-  build:
+  build-linux:
+    name: "Compile for Ubuntu"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build --verbose --release;cp target/release/rctop .
+      run: cargo build --verbose --release
     - name: Run tests
       run: cargo test --verbose --release
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop_compiled
-        path: rctop
+        name: rctop_compiled_linux
+        path: target/release/rctop
 
-  release:
-        name: "Release Build"
-        runs-on: ubuntu-latest
-        needs: build
-        steps:
-          
-          # Yes we get the repo again but only for the version in the package.json
-          - name: Checkout
-            uses: actions/checkout@v2
-          - name: Set Version Variable
-            run: >
-              echo "::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
-            id: version
+  build-windows:
+    name: "Compile for Windows"
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rctop_compiled_windows
+        path: target/release/rctop.exe
 
-          # Download the artifacts
-          - name: Download Binaries
-            uses: actions/download-artifact@v2
-            with:
-              name: rctop_compiled
-              path: build
+  build-macos:
+    name: "Compile for Macos"
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rctop_compiled_macos
+        path: target/release/rctop
+    
 
-          # The release script that prepares a new Github release
-          - name: Create Release
-            uses: actions/create-release@v1
-            id: create_release
-            continue-on-error: true
-            with:
-              draft: false
-              prerelease: false
-              release_name: rctop v${{ steps.version.outputs.version }}
-              tag_name: v${{ steps.version.outputs.version }}
-            env:
-              GITHUB_TOKEN: ${{ github.token }}
+  create-release:
+    name: "Create Release"
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos, build-windows]
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      
+      # Yes we get the repo again but only for the version in the package.json
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set Version Variable
+        id: version
+        run: >
+          echo "::set-output name=value::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
+     
+      # The release script that prepares a new Github release
+      - name: Create Release
+        uses: actions/create-release@v1
+        id: create_release
+        continue-on-error: true
+        with:
+          draft: false
+          prerelease: false
+          release_name: rctop v${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
-          # Upload artifacts to the release
-          - name: Upload Linux Artifact
-            uses: actions/upload-release-asset@v1
-            continue-on-error: true
-            env:
-              GITHUB_TOKEN: ${{ github.token }}
-            with:
-              upload_url: ${{ steps.create_release.outputs.upload_url }}
-              asset_path: ./build/rctop
-              asset_name: rctop.v${{ steps.version.outputs.version }}
-              asset_content_type: application/octet-stream
+  upload: 
+    name: "Upload Builds"
+    runs-on: ubuntu-latest
+    needs: create-release
+    strategy:
+      matrix: 
+       targetPlatform:
+          - windows
+          - linux
+          - macos
+      fail-fast: false
+    steps:
+
+      # Download the artifacts
+      - name: Download ${{matrix.targetPlatform}} Binaries
+        uses: actions/download-artifact@v2
+        with:
+          name: rctop_compiled_${{matrix.targetPlatform}}
+          path: ${{matrix.targetPlatform}}_build
+
+      # Upload Release
+      - name: Upload ${{matrix.targetPlatform}} Artifact
+        uses: actions/upload-release-asset@v1
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{matrix.targetPlatform}}_build/${{ matrix.targetPlatform == 'windows' && 'rctop.exe' || 'rctop' }}
+          asset_name: rctop.${{matrix.targetPlatform}}.v${{ needs.create-release.outputs.version }}
+          asset_content_type: application/octet-stream
