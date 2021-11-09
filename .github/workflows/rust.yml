@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install linker (aarch64)
-      run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Install linker (multilib)
       run: "sudo apt install gcc-multilib -y"
+    - name: Install linker (aarch64)
+      run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Add Target
       run: "rustup target add ${{matrix.targetPlatform}}-unknown-linux-gnu"
     - name: Build
