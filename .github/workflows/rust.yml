@@ -40,7 +40,7 @@ jobs:
             uses: actions/download-artifact@v2
             with:
               name: rctop artifact
-              path: rctop
+              path: ./
 
           # The release script that prepares a new Github release
           - name: Create Release
