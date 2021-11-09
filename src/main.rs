@@ -26,13 +26,13 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The main function of the program
 fn main() {
     // Move and hide the cursor
-    execute!(stdout(), Hide).ok();
+    execute!(stdout(), Hide).unwrap();
 
     std::thread::spawn(move || {
         // Wait for Ctrl+C
         ctrlc::set_handler(move || {
             println!("Received Ctrl + C! Exiting...");
-            execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).ok();
+            execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).unwrap();
             process::exit(0);
         })
         .expect("Error setting Ctrl + C handler");
@@ -44,17 +44,30 @@ fn main() {
 async fn async_main() {
     let sys = System::new();
     let mut term_size = get_term_size();
-    let mut i: u16 = 0;
 
-    while i < term_size.1 {
-        println!("");
-        i += 1;
+    for _i in 0..term_size.1 {
+        print!("\n");
     }
     loop {
+        let mut top_left_str: String = String::new();
+        let mut top_right_str: String = String::new();
+        let mut bottom_left_str: String = String::new();
+        let mut bottom_right_str: String = String::new();
         let temp_size = get_term_size();
+        // If terminal has been resized, clear everything
         if temp_size.0 != term_size.0 || temp_size.1 != term_size.1 {
             term_size = temp_size;
-            execute!(stdout(), Clear(All)).ok();
+            execute!(stdout(), Clear(All)).unwrap();
+        }
+        top_left_str += &format!(
+            "RCTOP v{} [Width: {}, Height: {}]",
+            VERSION, term_size.0, term_size.1
+        );
+        match sys.uptime() {
+            Ok(uptime) => {
+                top_right_str += &format!("Uptime: {}", parse_time(&uptime));
+            },
+            Err(_) => {}
         }
         execute!(
             stdout(),
@@ -62,16 +75,27 @@ async fn async_main() {
             Clear(CurrentLine),
             SetBackgroundColor(Color::DarkCyan)
         )
-        .ok();
-        for _i in 0..term_size.0 {
-            print!(" ");
+        .unwrap();
+        print!(" ");
+        if term_size.0 > top_left_str.len() as u16 + top_right_str.len() as u16 + 2 {
+            print!("{}", top_left_str);
+            for _i in 0..(term_size.0 as usize - top_left_str.len() - top_right_str.len() - 2) {
+                print!(" ");
+            }
+            print!("{} ", top_right_str);
         }
-        execute!(stdout(), MoveTo(1, 0)).ok();
-        print!(
-            "RCTOP v{} [Width: {}, Height: {}]",
-            VERSION, term_size.0, term_size.1
-        );
-        execute!(stdout(), ResetColor, MoveTo(0, 2)).ok();
+        else if term_size.0 > top_left_str.len() as u16 as u16 + 1 {
+            print!("{}", top_left_str);
+            for _i in 0..(term_size.0 as usize - top_left_str.len() - 1) {
+                print!(" ");
+            }
+        } else {
+            top_left_str.truncate(term_size.0 as usize + 4);
+            top_left_str += "...";
+            print!("{} ", top_left_str);
+        }
+
+        execute!(stdout(), ResetColor, MoveTo(0, 2)).unwrap();
         // match sys.mounts() {
         //     Ok(mounts) => {
         //         println!("\nMounts:");
@@ -153,7 +177,7 @@ async fn async_main() {
             Ok(cpu_usages) => {
                 let cpu_count_string_length: usize = cpu_usages.len().to_string().len();
                 for i in 0..cpu_usages.len() {
-                    execute!(stdout(), Clear(CurrentLine)).ok();
+                    execute!(stdout(), Clear(CurrentLine)).unwrap();
                     print!("CPU {}:", i);
                     for _j in i.to_string().len()..cpu_count_string_length + 1 {
                         print!(" ");
@@ -164,7 +188,7 @@ async fn async_main() {
                         Color::DarkGreen,
                     );
                     println!("");
-                    execute!(stdout(), Clear(CurrentLine)).ok();
+                    execute!(stdout(), Clear(CurrentLine)).unwrap();
                     //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
                     // Sum up the cpu usages
                     total_cpu += &cpu_usages[i][4];
@@ -178,7 +202,7 @@ async fn async_main() {
         match get_mem_size(&sys) {
             Ok(mem_size) => {
                 memory = mem_size;
-                execute!(stdout(), Clear(CurrentLine)).ok();
+                execute!(stdout(), Clear(CurrentLine)).unwrap();
                 print!("\nMemory: ");
                 print_bar(
                     term_size.0 - 5,
@@ -186,7 +210,7 @@ async fn async_main() {
                     Color::DarkYellow,
                 );
                 println!("");
-                // execute!(stdout(), Clear(CurrentLine)).ok();
+                // execute!(stdout(), Clear(CurrentLine)).unwrap();
                 // print!("Swap: ");
                 // print_bar(
                 //     term_size.0 - 5,
@@ -197,15 +221,7 @@ async fn async_main() {
             }
             Err(x) => print!("\nMemory: error: {}", x.to_string()),
         }
-        match sys.battery_life() {
-            Ok(battery) => print!(
-                "\nBattery: {}%, {}h{}m remaining",
-                battery.remaining_capacity * 100.0,
-                battery.remaining_time.as_secs() / 3600,
-                battery.remaining_time.as_secs() % 60
-            ),
-            Err(x) => print!("\nBattery: error: {}", x),
-        }
+
 
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
         execute!(
@@ -214,14 +230,48 @@ async fn async_main() {
             Clear(CurrentLine),
             SetBackgroundColor(Color::DarkCyan)
         )
-        .ok();
+        .unwrap();
         for _i in 0..term_size.0 {
             print!(" ");
         }
-        execute!(stdout(), MoveTo(1, term_size.1)).ok();
-        print!("CPU: {:.2}% ", total_cpu);
-        print!("RAM: {} / {} ", parse_size(&memory[1]), parse_size(&memory[0]));
-        execute!(stdout(), ResetColor).ok();
+        bottom_left_str += &format!("CPU: {:.2}% ", total_cpu);
+        bottom_left_str += &format!("RAM: {} / {} ", parse_size(&memory[1]), parse_size(&memory[0]));
+        match sys.battery_life() {
+            Ok(battery) => {
+                bottom_right_str += &format!(
+                    "\nBattery: {:.2}%, {}h{}m",
+                    battery.remaining_capacity * 100.0,
+                    battery.remaining_time.as_secs() / 3600,
+                    battery.remaining_time.as_secs() % 60
+                );
+            },
+            Err(_) => {},
+        }
+        execute!(
+            stdout(),
+            MoveTo(0, term_size.1),
+            Clear(CurrentLine),
+            SetBackgroundColor(Color::DarkCyan)
+        ).unwrap();
+        print!(" ");
+        if term_size.0 > bottom_left_str.len() as u16 + bottom_right_str.len() as u16 + 2 {
+            print!("{}", bottom_left_str);
+            for _i in 0..(term_size.0 as usize - bottom_left_str.len() - bottom_right_str.len() - 2) {
+                print!(" ");
+            }
+            print!("{} ", bottom_right_str);
+        }
+        else if term_size.0 > bottom_left_str.len() as u16 + 1 {
+            print!("{}", bottom_left_str);
+            for _i in 0..(term_size.0 as usize - bottom_left_str.len() - 1) {
+                print!(" ");
+            }
+        } else {
+            bottom_left_str.truncate(term_size.0 as usize + 4);
+            bottom_left_str += "...";
+            print!("{} ", bottom_left_str);
+        }
+        execute!(stdout(), ResetColor).unwrap();
     }
 }
 
@@ -240,6 +290,10 @@ fn get_term_size() -> (u16, u16) {
     }
 }
 
+/// Parses the given size into string with right size suffix and returns it
+/// ### Arguments
+///
+/// * `refsize` - The reference to thesize to be parsed
 fn parse_size(refsize: &u64) -> String {
     let mut size: f32 = *refsize as f32;
     let mut unit_index: usize = 0;
@@ -258,7 +312,37 @@ fn parse_size(refsize: &u64) -> String {
         size /= 1024.0;
         unit_index += 1;
     }
-    return format!("{:.2} {}", size, unit_vec[unit_index]);
+    return format!("{:.2}{}", size, unit_vec[unit_index]);
+}
+
+fn parse_time(reftime: &Duration) -> String {
+    let time: u64 = reftime.as_secs();
+    let mut time_str: String = String::new();
+    let mut time_vec: Vec<u64> = vec![];
+    let mut unit_index: usize = 0;
+    let unit_vec: Vec<String> = vec![
+        String::from("y"),
+        String::from("w"),
+        String::from("d"),
+        String::from("h"),
+        String::from("m"),
+        String::from("s"),
+    ];
+
+    time_vec.push(time / 31536000);
+    time_vec.push((time / 604800) % 52);
+    time_vec.push((time / 86400) % 7);
+    time_vec.push((time / 3600) % 24);
+    time_vec.push((time / 60) % 60);
+    time_vec.push(time % 60);
+
+    for i in 0..time_vec.len() {
+        if time_vec[i] != 0 {
+            time_str += &format!("{}{} ", time_vec[i], unit_vec[i]);
+        }
+    }
+    return time_str;
+
 }
 
 fn print_graph_stats(
@@ -271,8 +355,8 @@ fn print_graph_stats(
     let mut index: usize = 0;
     let length = cpu_vec.len();
     for i in y_offset - max_height..y_offset {
-        execute!(stdout(), MoveTo(0, i)).ok();
-        execute!(stdout(), Clear(CurrentLine)).ok();
+        execute!(stdout(), MoveTo(0, i)).unwrap();
+        execute!(stdout(), Clear(CurrentLine)).unwrap();
     }
     while index < max_width.into() && index < length {
         let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
@@ -281,7 +365,7 @@ fn print_graph_stats(
             stdout(),
             MoveTo(x_offset - index as u16, y_offset - max_height + floored)
         )
-        .ok();
+        .unwrap();
         if (height - floored as f32) <= 0.33 {
             print!("_");
         } else if (height - floored as f32) <= 0.66 {
@@ -299,7 +383,7 @@ fn print_graph_stats(
 /// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
 fn print_bar(max_width: u16, percentage: f32, color: Color) {
-    execute!(stdout(), SetForegroundColor(color)).ok();
+    execute!(stdout(), SetForegroundColor(color)).unwrap();
     let block_count = max_width as f32 / 100_f32 * percentage;
     let mut index: u16 = 0;
     let floored = block_count as u16;
@@ -320,7 +404,7 @@ fn print_bar(max_width: u16, percentage: f32, color: Color) {
             print!(" ");
         }
     }
-    execute!(stdout(), ResetColor).ok();
+    execute!(stdout(), ResetColor).unwrap();
 }
 
 /// Fetches the current cpu usage of the system or throws error if the fetch fails,
