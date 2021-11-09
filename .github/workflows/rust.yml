@@ -14,6 +14,7 @@ jobs:
           - x86_64
           - i686
           - aarch64
+          - mips
     name: "Compile for Linux"
     runs-on: ubuntu-latest
     steps:
@@ -105,6 +106,7 @@ jobs:
           - linux_aarch64
           - linux_i686
           - linux_x86_64
+          - linux_mips
           - windows
           - macos
       fail-fast: false
