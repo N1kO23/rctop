@@ -27,7 +27,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: rctop_compiled_${{matrix.targetPlatform}}
-        path: target/release/*
+        path: target/release/rctop
 
   release:
     name: "Release Build"
