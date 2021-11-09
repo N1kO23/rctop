@@ -32,6 +32,7 @@ jobs:
   release:
     name: "Release Build"
     runs-on: ubuntu-latest
+    needs: build
     strategy:
       matrix: 
        targetPlatform:
