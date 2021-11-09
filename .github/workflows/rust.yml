@@ -68,7 +68,7 @@ jobs:
   create-release:
     name: "Create Release"
     runs-on: ubuntu-latest
-    needs: [build-linux, build-macos, build-windows, build-linux-arm, build-linux-i686]
+    needs: [build-linux, build-macos, build-windows]
     outputs:
       version: ${{ steps.version.outputs.value }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
