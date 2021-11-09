@@ -21,6 +21,23 @@ jobs:
         name: rctop_compiled_linux
         path: target/release/rctop
 
+  build-linux-arm:
+    name: "Compile for Linux (ARM)"
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install linker
+      run: "sudo apt install gcc-aarch64-linux-gnu -y"
+    - name: Build
+      run: cargo build --target aarch64-unknown-linux-gnu --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rctop_compiled_linux_arm
+        path: target/release/rctop
+
   build-windows:
     name: "Compile for Windows"
     runs-on: windows-latest
@@ -55,7 +72,7 @@ jobs:
   create-release:
     name: "Create Release"
     runs-on: ubuntu-latest
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows, build-linux-arm]
     outputs:
       version: ${{ steps.version.outputs.value }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -91,6 +108,7 @@ jobs:
        targetPlatform:
           - windows
           - linux
+          - linux_arm
           - macos
       fail-fast: false
     steps:
