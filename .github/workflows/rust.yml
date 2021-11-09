@@ -32,6 +32,10 @@ jobs:
       id: version
     - name: Install Cross
       run: cargo install cross
+    - name: Set Target 
+      run: rustup target add ${{matrix.targetPlatform}}
+    - name: Install Toolchain
+      run: rustup toolchain install stable-${{matrix.targetPlatform}}
     - name: Build
       run: cross build --target ${{matrix.targetPlatform}} --verbose --release;cp target/release/rctop .
     - name: Run tests
