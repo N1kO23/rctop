@@ -7,57 +7,32 @@ env:
 
 jobs:
   build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform: 
+          - x86_64
+          - i686
+          - aarch64
     name: "Compile for Linux"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --release
-    - name: Run tests
-      run: cargo test --release
-    - name: Upload artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: rctop_compiled_linux
-        path: target/release/rctop
-
-  build-linux-i686: 
-    name: "Compile for Linux (32-Bit)"
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install linker
+    - name: Install linker (multilib)
       run: "sudo apt install gcc-multilib -y"
-    - name: Add Target
-      run: "rustup target add i686-unknown-linux-gnu"
-    - name: Build
-      run: cargo build --target i686-unknown-linux-gnu --release
-    - name: Run tests
-      run: cargo test --release
-    - name: Upload artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: rctop_compiled_linux_i686
-        path: target/i686-unknown-linux-gnu/release/rctop
-
-  build-linux-arm:
-    name: "Compile for Linux (ARM)"
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install linker
+    - name: Install linker (aarch64)
       run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Add Target
-      run: "rustup target add aarch64-unknown-linux-gnu"
+      run: "rustup target add ${{matrix.targetPlatform}}-unknown-linux-gnu"
     - name: Build
-      run: cargo build --target aarch64-unknown-linux-gnu --release
+      run: cargo build --target ${{matrix.targetPlatform}}-unknown-linux-gnu --release
     - name: Run tests
       run: cargo test --release
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop_compiled_linux_arm
-        path: target/aarch64-unknown-linux-gnu/release/rctop
+        name: rctop_compiled_linux_${{matrix.targetPlatform}}
+        path: target/${{matrix.targetPlatform}}-unknown-linux-gnu/release/rctop
 
   build-windows:
     name: "Compile for Windows"
@@ -93,7 +68,7 @@ jobs:
   create-release:
     name: "Create Release"
     runs-on: ubuntu-latest
-    needs: [build-linux, build-macos, build-windows, build-linux-arm, build-linux-i686]
+    needs: [build-linux, build-macos, build-windows]
     outputs:
       version: ${{ steps.version.outputs.value }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -127,10 +102,10 @@ jobs:
     strategy:
       matrix: 
        targetPlatform:
-          - windows
-          - linux
-          - linux_arm
+          - linux_aarch64
           - linux_i686
+          - linux_x86_64
+          - windows
           - macos
       fail-fast: false
     steps:
