@@ -130,7 +130,7 @@ jobs:
           - windows
           - linux
           - linux_arm
-          - rctop_compiled_linux_i686
+          - linux_i686
           - macos
       fail-fast: false
     steps:
