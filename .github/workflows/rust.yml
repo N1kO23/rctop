@@ -33,7 +33,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: rctop_compiled_windows
-        path: target/release/rctop
+        path: rctop
 
   build-macos:
     runs-on: macos-latest
