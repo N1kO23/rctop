@@ -1,16 +1,16 @@
 # What is it?
 
-RCTOP is a simple system monitoring app that runs purely on terminal and doesn't feature GUI. One can compare it to htop, but more stripped down. RCTOP is fully coded in Rust.
+RCTOP is a simple WIP system monitoring app that runs purely on terminal and doesn't feature GUI. One can compare it to htop, but more stripped down. RCTOP is fully coded in Rust.
 
 ## Notable features
 
 - Lightweight
 - Small filesize
 - Shows CPU usage (system, user, interrupts, etc)
-- Shows RAM usage, including pagefile
-- Shows mounted drives and how full they are
+- Shows RAM usage
+- Shows mounted drives and how full they are (not implemented yet)
 - Shows battery level, if supported
-- Shows CPU temps, if supported
+- Shows CPU temps, if supported (not implemented yet)
 
 # Installation
 
@@ -27,7 +27,7 @@ To compile and run the program from source code, one needs to have Rust installe
 
 # TODO
 
-- Add ram and pagefile usage
+- Add pagefile usage
 - Add uptime indicator
 - Add drive list with usages
 - Add battery indicator
@@ -35,5 +35,7 @@ To compile and run the program from source code, one needs to have Rust installe
 - Add network throughput indicator
 - Add tabs for some fields to show extra information (example. cpu details)
 - Make the termial look actually good
-- Make keyboard interrupt handler
+- Make keyboard interrupt handler, rn handles only ctrl+c
 - Optimize terminal view update
+- Multithread the thing
+- Launch arg handling for different things such as refresh rate
