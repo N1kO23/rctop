@@ -31,7 +31,8 @@ jobs:
           - name: Checkout
             uses: actions/checkout@v2
           - name: Set Version Variable
-            run: "echo '::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)'"
+            run: >
+              echo "::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
             id: version
 
           # Download the artifacts
