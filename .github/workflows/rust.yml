@@ -14,12 +14,18 @@ jobs:
           - x86_64
           - i686
           - aarch64
+          - mips
+          - mipsel
     name: "Compile for Linux"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Install linker (multilib)
       run: "sudo apt install gcc-multilib -y"
+    - name: Install linker (mips)
+      run: "sudo apt install gcc-mips-linux-gnu -y"
+    - name: Install linker (mipsel)
+      run: "sudo apt install gcc-mipsel-linux-gnu -y"
     - name: Install linker (aarch64)
       run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Add Target
@@ -105,6 +111,8 @@ jobs:
           - linux_aarch64
           - linux_i686
           - linux_x86_64
+          - linux_mips
+          - linux_mipsel
           - windows
           - macos
       fail-fast: false
