@@ -30,7 +30,9 @@ jobs:
       run: >
         echo "::set-output name=version::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
       id: version
-    - name: Install Target 
+    - name: Install GCC
+      run: sudo apt update && sudo apt install mingw-w64
+    - name: Set Target 
       run: rustup target add ${{matrix.targetPlatform}}
     - name: Install Toolchain
       run: rustup toolchain install stable-${{matrix.targetPlatform}}
