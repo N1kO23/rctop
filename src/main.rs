@@ -28,15 +28,17 @@ fn main() {
     // Move and hide the cursor
     execute!(stdout(), Hide).unwrap();
 
-    std::thread::spawn(move || {
-        // Wait for Ctrl+C
-        ctrlc::set_handler(move || {
-            println!("Received Ctrl + C! Exiting...");
-            execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).unwrap();
-            process::exit(0);
-        })
-        .expect("Error setting Ctrl + C handler");
-    });
+    // CTRL-C handler
+    ctrlc::set_handler(move || {
+        println!("Received Ctrl + C! Exiting...");
+        execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).unwrap();
+        process::exit(0);
+    })
+    .expect("Error setting Ctrl + C handler");
+
+    // std::thread::spawn(move || {
+        
+    // });
     // Block main thread until process finishes
     block_on(async_main());
 }
@@ -77,9 +79,9 @@ async fn async_main() {
         )
         .unwrap();
         print!(" ");
-        if term_size.0 > top_left_str.len() as u16 + top_right_str.len() as u16 + 2 {
+        if term_size.0 > top_left_str.len() as u16 + top_right_str.len() as u16 + 1 {
             print!("{}", top_left_str);
-            for _i in 0..(term_size.0 as usize - top_left_str.len() - top_right_str.len() - 2) {
+            for _i in 0..(term_size.0 as usize - top_left_str.len() - top_right_str.len() - 1) {
                 print!(" ");
             }
             print!("{} ", top_right_str);
@@ -183,7 +185,7 @@ async fn async_main() {
                         print!(" ");
                     }
                     print_bar(
-                        term_size.0 - 5,
+                        term_size.0 - 8,
                         100_f32 - &cpu_usages[i][4],
                         Color::DarkGreen,
                     );
@@ -205,7 +207,7 @@ async fn async_main() {
                 execute!(stdout(), Clear(CurrentLine)).unwrap();
                 print!("\nMemory: ");
                 print_bar(
-                    term_size.0 - 5,
+                    term_size.0 - 8,
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
                     Color::DarkYellow,
                 );
@@ -315,11 +317,14 @@ fn parse_size(refsize: &u64) -> String {
     return format!("{:.2}{}", size, unit_vec[unit_index]);
 }
 
+/// Formats the time from seconds to a string with the format yy:ww:dd:hh:mm:ss
+/// depending on how long the system has been running
+/// ### Arguments
+/// * `reftime` - The time in seconds
 fn parse_time(reftime: &Duration) -> String {
     let time: u64 = reftime.as_secs();
     let mut time_str: String = String::new();
     let mut time_vec: Vec<u64> = vec![];
-    let mut unit_index: usize = 0;
     let unit_vec: Vec<String> = vec![
         String::from("y"),
         String::from("w"),
