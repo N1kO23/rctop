@@ -18,7 +18,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v1
       with:
-        name: rctop artifact
+        name: rctop_compiled
         path: rctop
 
   release:
@@ -39,8 +39,8 @@ jobs:
           - name: Download Binaries
             uses: actions/download-artifact@v2
             with:
-              name: rctop artifact
-              path: ./
+              name: rctop_compiled
+              path: build
 
           # The release script that prepares a new Github release
           - name: Create Release
@@ -63,6 +63,6 @@ jobs:
               GITHUB_TOKEN: ${{ github.token }}
             with:
               upload_url: ${{ steps.create_release.outputs.upload_url }}
-              asset_path: ./
+              asset_path: ./build/rctop
               asset_name: rctop.v${{ steps.version.outputs.version }}
               asset_content_type: application/octet-stream
