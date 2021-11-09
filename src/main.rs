@@ -179,7 +179,7 @@ async fn async_main() {
             Ok(mem_size) => {
                 memory = mem_size;
                 execute!(stdout(), Clear(CurrentLine)).ok();
-                print!("Memory: ");
+                print!("\nMemory: ");
                 print_bar(
                     term_size.0 - 5,
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
@@ -220,7 +220,7 @@ async fn async_main() {
         }
         execute!(stdout(), MoveTo(1, term_size.1)).ok();
         print!("CPU: {:.2}% ", total_cpu);
-        print!("RAM: {} / {} ", memory[1], memory[0]);
+        print!("RAM: {} / {} ", parse_size(&memory[1]), parse_size(&memory[0]));
         execute!(stdout(), ResetColor).ok();
     }
 }
@@ -238,6 +238,27 @@ fn get_term_size() -> (u16, u16) {
             process::exit(1);
         }
     }
+}
+
+fn parse_size(refsize: &u64) -> String {
+    let mut size: f32 = *refsize as f32;
+    let mut unit_index: usize = 0;
+    let unit_vec: Vec<String> = vec![
+        String::from("B"),
+        String::from("KB"),
+        String::from("MB"),
+        String::from("GB"),
+        String::from("TB"),
+        String::from("PB"),
+        String::from("EB"),
+        String::from("ZB"),
+        String::from("YB"),
+    ];
+    while size > 1024.0 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+    return format!("{:.2} {}", size, unit_vec[unit_index]);
 }
 
 fn print_graph_stats(
@@ -348,12 +369,12 @@ fn get_cpu_stats(
 fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
     match system.memory() {
         Ok(mem) => {
-            println!(
-                "\nMemory: {} used / {} total ({:?})",
-                saturating_sub_bytes(mem.total, mem.free),
-                mem.total,
-                mem.platform_memory
-            );
+            // println!(
+            //     "\nMemory: {} used / {} total ({:?})",
+            //     saturating_sub_bytes(mem.total, mem.free),
+            //     mem.total,
+            //     mem.platform_memory
+            // );
             let mut vec = vec![];
             vec.push(mem.total.as_u64());
             vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
