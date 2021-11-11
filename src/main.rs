@@ -10,37 +10,50 @@ use ctrlc;
 use futures::executor::block_on;
 use systemstat::{saturating_sub_bytes, Platform, System};
 
-use crossterm::style::{Attribute, Color, ResetColor, SetBackgroundColor, SetForegroundColor};
+use crossterm::style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor};
 use crossterm::terminal::{
     Clear,
     ClearType::{All, CurrentLine},
-    ScrollUp,
 };
 use crossterm::{
-    cursor::{position, Hide, MoveTo, Show},
+    cursor::{MoveTo},
     execute,
+    event::{Event, read},
 };
+
+mod ui;
+mod datafetcher;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The main function of the program
 fn main() {
-    // Move and hide the cursor
-    execute!(stdout(), Hide).unwrap();
 
+    ui::init();
     // CTRL-C handler
     ctrlc::set_handler(move || {
-        println!("Received Ctrl + C! Exiting...");
-        execute!(stdout(), Show, Clear(All), ResetColor, MoveTo(0, 0)).unwrap();
-        process::exit(0);
+        ui::reset();
     })
     .expect("Error setting Ctrl + C handler");
 
-    // std::thread::spawn(move || {
-        
-    // });
+    // Create thread for keyboard events
+    thread::spawn(|| -> crossterm::Result<()> {
+        // Loop for keyboard events
+        loop {
+            // `read()` blocks until an `Event` is available
+            match read()? {
+                Event::Key(event) => println!("{:?}", event),
+                Event::Mouse(event) => println!("{:?}", event),
+                Event::Resize(_width, _height) => execute!(stdout(), Clear(All)).unwrap(),
+            }
+        }
+    });
+
+
     // Block main thread until process finishes
     block_on(async_main());
+    // Reset the terminal view
+    ui::reset();
 }
 
 async fn async_main() {
@@ -84,7 +97,7 @@ async fn async_main() {
             for _i in 0..(term_size.0 as usize - top_left_str.len() - top_right_str.len() - 1) {
                 print!(" ");
             }
-            print!("{} ", top_right_str);
+            print!("{}", top_right_str);
         }
         else if term_size.0 > top_left_str.len() as u16 as u16 + 1 {
             print!("{}", top_left_str);
@@ -350,37 +363,37 @@ fn parse_time(reftime: &Duration) -> String {
 
 }
 
-fn print_graph_stats(
-    cpu_vec: &std::vec::Vec<f32>,
-    max_width: u16,
-    max_height: u16,
-    x_offset: u16,
-    y_offset: u16,
-) {
-    let mut index: usize = 0;
-    let length = cpu_vec.len();
-    for i in y_offset - max_height..y_offset {
-        execute!(stdout(), MoveTo(0, i)).unwrap();
-        execute!(stdout(), Clear(CurrentLine)).unwrap();
-    }
-    while index < max_width.into() && index < length {
-        let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
-        let floored: u16 = height as u16;
-        execute!(
-            stdout(),
-            MoveTo(x_offset - index as u16, y_offset - max_height + floored)
-        )
-        .unwrap();
-        if (height - floored as f32) <= 0.33 {
-            print!("_");
-        } else if (height - floored as f32) <= 0.66 {
-            print!("-");
-        } else {
-            print!("¯");
-        }
-        index += 1;
-    }
-}
+// fn print_graph_stats(
+//     cpu_vec: &std::vec::Vec<f32>,
+//     max_width: u16,
+//     max_height: u16,
+//     x_offset: u16,
+//     y_offset: u16,
+// ) {
+//     let mut index: usize = 0;
+//     let length = cpu_vec.len();
+//     for i in y_offset - max_height..y_offset {
+//         execute!(stdout(), MoveTo(0, i)).unwrap();
+//         execute!(stdout(), Clear(CurrentLine)).unwrap();
+//     }
+//     while index < max_width.into() && index < length {
+//         let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
+//         let floored: u16 = height as u16;
+//         execute!(
+//             stdout(),
+//             MoveTo(x_offset - index as u16, y_offset - max_height + floored)
+//         )
+//         .unwrap();
+//         if (height - floored as f32) <= 0.33 {
+//             print!("_");
+//         } else if (height - floored as f32) <= 0.66 {
+//             print!("-");
+//         } else {
+//             print!("¯");
+//         }
+//         index += 1;
+//     }
+// }
 
 /// Prints a bar that is as long as the percentage of the given terminal width
 /// ### Arguments
