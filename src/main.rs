@@ -23,6 +23,7 @@ use crossterm::{
 
 mod ui;
 mod datafetcher;
+mod utils;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -80,7 +81,7 @@ async fn async_main() {
         );
         match sys.uptime() {
             Ok(uptime) => {
-                top_right_str += &format!("Uptime: {}", parse_time(&uptime));
+                top_right_str += &format!("Uptime: {}", utils::parse_time(&uptime));
             },
             Err(_) => {}
         }
@@ -111,78 +112,6 @@ async fn async_main() {
         }
 
         execute!(stdout(), ResetColor, MoveTo(0, 2)).unwrap();
-        // match sys.mounts() {
-        //     Ok(mounts) => {
-        //         println!("\nMounts:");
-        //         for mount in mounts.iter() {
-        //             println!("{} ---{}---> {} (available {} of {})",
-        //                      mount.fs_mounted_from, mount.fs_type, mount.fs_mounted_on, mount.avail, mount.total);
-        //         }
-        //     }
-        //     Err(x) => println!("\nMounts: error: {}", x)
-        // }
-        // match sys.mount_at("/") {
-        //     Ok(mount) => {
-        //         println!("\nMount at /:");
-        //         println!("{} ---{}---> {} (available {} of {})",
-        //                  mount.fs_mounted_from, mount.fs_type, mount.fs_mounted_on, mount.avail, mount.total);
-        //     }
-        //     Err(x) => println!("\nMount at /: error: {}", x)
-        // }
-        // match sys.block_device_statistics() {
-        //     Ok(stats) => {
-        //         for blkstats in stats.values() {
-        //             println!("{}: {:?}", blkstats.name, blkstats);
-        //         }
-        //     }
-        //     Err(x) => println!("\nBlock statistics error: {}", x.to_string())
-        // }
-        // match sys.networks() {
-        //     Ok(netifs) => {
-        //         println!("\nNetworks:");
-        //         for netif in netifs.values() {
-        //             println!("{} ({:?})", netif.name, netif.addrs);
-        //         }
-        //     }
-        //     Err(x) => println!("\nNetworks: error: {}", x)
-        // }
-        // match sys.networks() {
-        //     Ok(netifs) => {
-        //         println!("\nNetwork interface statistics:");
-        //         for netif in netifs.values() {
-        //             println!("{} statistics: ({:?})", netif.name, sys.network_stats(&netif.name));
-        //         }
-        //     }
-        //     Err(x) => println!("\nNetworks: error: {}", x)
-        // }
-        // match sys.on_ac_power() {
-        //     Ok(power) => println!(", AC power: {}", power),
-        //     Err(x) => println!(", AC power: error: {}", x)
-        // }
-        // match sys.memory() {
-        //     Ok(mem) => println!("\nMemory: {} used / {} ({} bytes) total ({:?})", saturating_sub_bytes(mem.total, mem.free), mem.total, mem.total.as_u64(), mem.platform_memory),
-        //     Err(x) => println!("\nMemory: error: {}", x)
-        // }
-        // match sys.load_average() {
-        //     Ok(loadavg) => println!("\nLoad average: {} {} {}", loadavg.one, loadavg.five, loadavg.fifteen),
-        //     Err(x) => println!("\nLoad average: error: {}", x)
-        // }
-        // match sys.uptime() {
-        //     Ok(uptime) => println!("\nUptime: {:?}", uptime),
-        //     Err(x) => println!("\nUptime: error: {}", x)
-        // }
-        // match sys.boot_time() {
-        //     Ok(boot_time) => println!("\nBoot time: {}", boot_time),
-        //     Err(x) => println!("\nBoot time: error: {}", x)
-        // }
-        // match sys.cpu_temp() {
-        //     Ok(cpu_temp) => println!("\nCPU temp: {}", cpu_temp),
-        //     Err(x) => println!("\nCPU temp: {}", x)
-        // }
-        // match sys.socket_stats() {
-        //     Ok(stats) => println!("\nSystem socket statistics: {:?}", stats),
-        //     Err(x) => println!("\nSystem socket statistics: error: {}", x.to_string())
-        // }
 
         // Total CPU usage is 0 at first in case of error
         let mut total_cpu: f32 = 0_f32;
@@ -217,8 +146,9 @@ async fn async_main() {
         match get_mem_size(&sys) {
             Ok(mem_size) => {
                 memory = mem_size;
+                println!(" ");
                 execute!(stdout(), Clear(CurrentLine)).unwrap();
-                print!("\nMemory: ");
+                print!("Memory: ");
                 print_bar(
                     term_size.0 - 8,
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
@@ -250,11 +180,11 @@ async fn async_main() {
             print!(" ");
         }
         bottom_left_str += &format!("CPU: {:.2}% ", total_cpu);
-        bottom_left_str += &format!("RAM: {} / {} ", parse_size(&memory[1]), parse_size(&memory[0]));
+        bottom_left_str += &format!("RAM: {} / {} ", utils::parse_size(&memory[1]), utils::parse_size(&memory[0]));
         match sys.battery_life() {
             Ok(battery) => {
                 bottom_right_str += &format!(
-                    "\nBattery: {:.2}%, {}h{}m",
+                    "Battery: {:.2}%, {}h{}m",
                     battery.remaining_capacity * 100.0,
                     battery.remaining_time.as_secs() / 3600,
                     battery.remaining_time.as_secs() % 60
@@ -305,64 +235,6 @@ fn get_term_size() -> (u16, u16) {
     }
 }
 
-/// Parses the given size into string with right size suffix and returns it
-/// ### Arguments
-///
-/// * `refsize` - The reference to thesize to be parsed
-fn parse_size(refsize: &u64) -> String {
-    let mut size: f32 = *refsize as f32;
-    let mut unit_index: usize = 0;
-    let unit_vec: Vec<String> = vec![
-        String::from("B"),
-        String::from("KB"),
-        String::from("MB"),
-        String::from("GB"),
-        String::from("TB"),
-        String::from("PB"),
-        String::from("EB"),
-        String::from("ZB"),
-        String::from("YB"),
-    ];
-    while size > 1024.0 {
-        size /= 1024.0;
-        unit_index += 1;
-    }
-    return format!("{:.2}{}", size, unit_vec[unit_index]);
-}
-
-/// Formats the time from seconds to a string with the format yy:ww:dd:hh:mm:ss
-/// depending on how long the system has been running
-/// ### Arguments
-/// * `reftime` - The time in seconds
-fn parse_time(reftime: &Duration) -> String {
-    let time: u64 = reftime.as_secs();
-    let mut time_str: String = String::new();
-    let mut time_vec: Vec<u64> = vec![];
-    let unit_vec: Vec<String> = vec![
-        String::from("y"),
-        String::from("w"),
-        String::from("d"),
-        String::from("h"),
-        String::from("m"),
-        String::from("s"),
-    ];
-
-    time_vec.push(time / 31536000);
-    time_vec.push((time / 604800) % 52);
-    time_vec.push((time / 86400) % 7);
-    time_vec.push((time / 3600) % 24);
-    time_vec.push((time / 60) % 60);
-    time_vec.push(time % 60);
-
-    for i in 0..time_vec.len() {
-        if time_vec[i] != 0 {
-            time_str += &format!("{}{} ", time_vec[i], unit_vec[i]);
-        }
-    }
-    return time_str;
-
-}
-
 // fn print_graph_stats(
 //     cpu_vec: &std::vec::Vec<f32>,
 //     max_width: u16,
@@ -407,17 +279,13 @@ fn print_bar(max_width: u16, percentage: f32, color: Color) {
     let floored = block_count as u16;
     // Print the full bars
     while index < floored {
-        print!("█");
+        print!("⧛");
         index = index + 1;
     }
     // Determine the last bar from decimal
     if floored != 100 {
-        if (block_count - floored as f32) <= 0.25 {
-            print!("░");
-        } else if (block_count - floored as f32) <= 0.5 {
-            print!("▒");
-        } else if (block_count - floored as f32) <= 0.75 {
-            print!("▓");
+        if (block_count - floored as f32) <= 0.5 {
+            print!("⧙");
         } else {
             print!(" ");
         }
