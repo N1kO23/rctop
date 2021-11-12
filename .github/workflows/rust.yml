@@ -16,11 +16,12 @@ jobs:
           - aarch64
           - mips
           - mipsel
-    name: "Compile for Linux"
+    name: "🐧 Compile for Linux"
     runs-on: self-hosted
     # runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - name: 🛎 Checkout
+      uses: actions/checkout@v2
     # - name: Install linker (multilib)
     #   run: "sudo apt install gcc-multilib -y"
     # - name: Install linker (mips)
@@ -29,43 +30,45 @@ jobs:
     #   run: "sudo apt install gcc-mipsel-linux-gnu -y"
     # - name: Install linker (aarch64)
     #   run: "sudo apt install gcc-aarch64-linux-gnu -y"
-    - name: Add Target
+    - name: 🗳 Add Target
       run: "rustup target add ${{matrix.targetPlatform}}-unknown-linux-gnu"
-    - name: Build
+    - name: 🛠 Build
       run: cargo build --target ${{matrix.targetPlatform}}-unknown-linux-gnu --release
-    - name: Run tests
+    - name: 🧪 Run tests
       run: cargo test --release
-    - name: Upload artifact
+    - name: 💎 Upload artifact
       uses: actions/upload-artifact@v1
       with:
         name: rctop_compiled_linux_${{matrix.targetPlatform}}
         path: target/${{matrix.targetPlatform}}-unknown-linux-gnu/release/rctop
 
   build-windows:
-    name: "Compile for Windows"
+    name: "❄ Compile for Windows"
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
+    - name: 🛎 Checkout
+      uses: actions/checkout@v2
+    - name: 🛠 Build
       run: cargo build --release
-    - name: Run tests
+    - name: 🧪 Run tests
       run: cargo test --release
-    - name: Upload artifact
+    - name: 💎 Upload artifact
       uses: actions/upload-artifact@v1
       with:
         name: rctop_compiled_windows
         path: target/release/rctop.exe
 
   build-macos:
-    name: "Compile for MacOS"
+    name: "🍎 Compile for MacOS"
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
+    - name: 🛎 Checkout
+      uses: actions/checkout@v2
+    - name: 🛠 Build
       run: cargo build --release
-    - name: Run tests
+    - name: 🧪 Run tests
       run: cargo test --release
-    - name: Upload artifact
+    - name: 💎 Upload artifact
       uses: actions/upload-artifact@v1
       with:
         name: rctop_compiled_macos
@@ -73,7 +76,7 @@ jobs:
     
 
   create-release:
-    name: "Create Release"
+    name: "📦 Create Release"
     # runs-on: ubuntu-latest
     runs-on: self-hosted
     needs: [build-linux, build-macos, build-windows]
@@ -82,15 +85,15 @@ jobs:
     steps:
       
       # Yes we get the repo again but only for the version in the package.json
-      - name: Checkout
+      - name: 🛎 Checkout
         uses: actions/checkout@v2
-      - name: Set Version Variable
+      - name: ⚡ Set Version Variable
         id: version
         run: >
           echo "::set-output name=value::$(cargo pkgid | cut -d# -f2 | cut -d: -f2)"
      
       # The release script that prepares a new Github release
-      - name: Create Release
+      - name: ⚡ Create Release
         uses: actions/create-release@v1
         id: create_release
         continue-on-error: true
@@ -103,7 +106,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
   upload: 
-    name: "Upload Builds"
+    name: "📤 Upload Builds"
     # runs-on: ubuntu-latest
     runs-on: self-hosted
     needs: create-release
@@ -121,14 +124,14 @@ jobs:
     steps:
 
       # Download the artifacts
-      - name: Download ${{matrix.targetPlatform}} Binaries
+      - name: 💎 Download ${{matrix.targetPlatform}} Binaries
         uses: actions/download-artifact@v2
         with:
           name: rctop_compiled_${{matrix.targetPlatform}}
           path: ${{matrix.targetPlatform}}_build
 
       # Upload Release
-      - name: Upload ${{matrix.targetPlatform}} Artifact
+      - name: 💎 Upload ${{matrix.targetPlatform}} Artifact
         uses: actions/upload-release-asset@v1
         continue-on-error: true
         env:
