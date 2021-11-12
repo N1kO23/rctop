@@ -1,6 +1,6 @@
 extern crate systemstat;
 
-use systemstat::{saturating_sub_bytes, Platform, System, PlatformCpuLoad, PlatformMemory, Filesystem, NetworkAddrs };
+use systemstat::{saturating_sub_bytes, Platform, System, LoadAverage, PlatformCpuLoad, PlatformMemory, Filesystem, NetworkAddrs };
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -26,13 +26,32 @@ pub struct SystemData {
 /// ### Fields
 /// * `cpu_count` - The system's CPU core count
 /// * `cpu_load` - The system's CPU load per core
+/// * `cpu_load_average` - The system's CPU load average
 /// * `cpu_temp` - The system's CPU temperature per core
-/// * `platform` - The system's CPU platform data
+/// * `platform` - The system's CPU platform specific data
 struct CPUData {
     cpu_count: usize,
-    cpu_usage: Vec<f32>,
+    cpu_load: Vec<CpuLoad>,
+    cpu_load_average: Vec<LoadAverage>,
     cpu_temp: Vec<f32>,
     platform: PlatformCpuLoad,
+}
+
+/// Contains the information about the CPU core's load
+/// ### Fields
+/// * `user` - The CPU core's user load
+/// * `nice` - The CPU core's nice load
+/// * `system` - The CPU core's system load
+/// * `interrupt` - The CPU core's interrupt load
+/// * `idle` - The CPU core's idle load
+/// * `total` - The CPU core's total load
+struct CpuLoad {
+    user: f32,
+    nice: f32,
+    system: f32,
+    interrupt: f32,
+    idle: f32,
+    total: f32,
 }
 
 /// Contains the information about the system's RAM
@@ -41,7 +60,7 @@ struct CPUData {
 /// * `ram_used` - The system's used RAM
 /// * `ram_free` - The system's free RAM
 /// * `ram_percentage` - The system's used RAM percentage
-/// * `platform` - The system's RAM platform data
+/// * `platform` - The system's RAM platform specific data
 struct RAMData {
     ram_total: u64,
     ram_used: u64,
@@ -57,7 +76,7 @@ struct RAMData {
 /// * `disk_used` - The system's used disk space per disc
 /// * `disk_free` - The system's free disk space per disc
 /// * `disk_percentage` - The system's used disk space percentage per disc
-/// * `platform` - The system's disk platform data
+/// * `platform` - The system's disk platform specific data
 struct DiskData {
     disk_count: u64,
     disk_total: Vec<u64>,
@@ -82,7 +101,13 @@ struct NetworkData {
     interface_tx: Vec<u64>,
 }
 
+
+/// Starts the system data fething framework
+/// ### Parameters
+/// * `thr_data` - The shared data that the thread will use and update
+/// * `interval` - The interval in milliseconds between each data fetching
 pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) {
+    let mut system = System::new();
     thread::spawn(move ||  {
         loop {
             let mut data = thr_data.lock().unwrap();
@@ -94,7 +119,7 @@ pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) {
 
 /// Fetches the current cpu usage of the system or throws error if the fetch fails,
 /// the first index is the cpu core and the second is the exact usage
-/// ### Arguments
+/// ### Parameters
 /// * `system` - The reference to the System
 /// ### Returns
 /// * `vec[0][0]` - User cpu usage
@@ -120,6 +145,45 @@ fn get_cpu_stats(
         vec.push(vec_vec);
     }
     Ok(vec)
+}
+
+/// Fetches the current memory usage of the system or throws error if the fetch fails,
+/// the first index is the total memory and the second is the used memory
+/// ### Parameters
+/// * `system` - The reference to the System
+/// ### Returns
+/// * `vec[0]` - Total memory
+/// * `vec[1]` - Used memory
+/// * `vec[2]` - Total swap
+/// * `vec[3]` - Used swap
+fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
+    match system.memory() {
+        Ok(mem) => {
+            // println!(
+            //     "\nMemory: {} used / {} total ({:?})",
+            //     saturating_sub_bytes(mem.total, mem.free),
+            //     mem.total,
+            //     mem.platform_memory
+            // );
+            let mut vec = vec![];
+            vec.push(mem.total.as_u64());
+            vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
+            // if mem.platform_memory.meminfo.contains_key("SwapTotal") {
+            //     match mem.platform_memory.meminfo.get("SwapTotal") {
+            //         Some(x) => vec.push(x.as_u64()),
+            //         None => (vec.push(0)),
+            //     }
+            // }
+            // if mem.platform_memory.meminfo.contains_key("SwapFree") {
+            //     match mem.platform_memory.meminfo.get("SwapFree") {
+            //         Some(x) => vec.push(x.as_u64()),
+            //         None => (vec.push(0)),
+            //     }
+            // }
+            Ok(vec)
+        }
+        Err(x) => Err(Box::new(x)),
+    }
 }
         
         // match sys.mounts() {

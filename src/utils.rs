@@ -2,8 +2,8 @@ use std::time::Duration;
 
 /// Formats the time from seconds to a string with the format yy:ww:dd:hh:mm:ss
 /// depending on how long the system has been running
-/// ### Arguments
-/// * `reftime` - The time in seconds
+/// ### Parameters
+/// * `reftime` - The reference to the time in seconds
 pub fn parse_time(reftime: &Duration) -> String {
   let time: u64 = reftime.as_secs();
   let mut time_str: String = String::new();
@@ -33,9 +33,8 @@ pub fn parse_time(reftime: &Duration) -> String {
 }
 
 /// Parses the given size into string with right size suffix and returns it
-/// ### Arguments
-///
-/// * `refsize` - The reference to thesize to be parsed
+/// ### Parameters
+/// * `refsize` - The reference to the size to be parsed
 pub fn parse_size(refsize: &u64) -> String {
   let mut size: f32 = *refsize as f32;
   let mut unit_index: usize = 0;
