@@ -1,6 +1,6 @@
 extern crate systemstat;
 
-use systemstat::{saturating_sub_bytes, Platform, System, LoadAverage, CPULoad, PlatformMemory, Filesystem, NetworkAddrs };
+use systemstat::{saturating_sub_bytes, Platform, System, LoadAverage, PlatformMemory, Filesystem, NetworkAddrs };
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -23,64 +23,76 @@ pub struct SystemData {
     pub uptime: Duration,
 }
 
+pub struct CPULoad {
+    pub user: f32,
+    pub nice: f32,
+    pub system: f32,
+    pub interrupt: f32,
+    pub idle: f32,
+}
+
 /// Contains the information about the system's CPU
 /// ### Fields
-/// * `cpu_count` - The system's CPU core count
-/// * `cpu_load` - The system's CPU load per core
-/// * `cpu_load_average` - The system's CPU load average
-/// * `cpu_temp` - The system's CPU temperature per core
-struct CPUData {
-    cpu_count: usize,
-    cpu_load: Vec<CPULoad>,
-    cpu_load_average: Vec<LoadAverage>,
-    cpu_temp: Vec<f32>,
+/// * `count` - The system's CPU core count
+/// * `load` - The system's CPU load per core
+/// * `load_average` - The system's CPU load average
+/// * `temp` - The system's CPU temperature per core
+pub struct CPUData {
+    pub count: usize,
+    pub load: Vec<CPULoad>,
+    pub load_average: Vec<LoadAverage>,
+    pub temp: Vec<f32>,
 }
 
 /// Contains the information about the system's RAM
 /// ### Fields
-/// * `ram_total` - The system's total RAM
-/// * `ram_used` - The system's used RAM
-/// * `ram_free` - The system's free RAM
-/// * `ram_percentage` - The system's used RAM percentage
+/// * `total` - The system's total RAM
+/// * `used` - The system's used RAM
+/// * `free` - The system's free RAM
+/// * `percentage` - The system's used RAM percentage
 /// * `platform` - The system's RAM platform specific data
-struct RAMData {
-    ram_total: u64,
-    ram_used: u64,
-    ram_free: u64,
-    ram_percentage: f32,
-    platform: PlatformMemory,
+pub struct RAMData {
+    pub total: u64,
+    pub used: u64,
+    pub free: u64,
+    pub percentage: f32,
+    pub platform: PlatformMemory,
 }
 
 /// Contains the information about the system's disk
 /// ### Fields
-/// * `disk_count` - The system's disk count
-/// * `disk_total` - The system's disk space per disc
-/// * `disk_used` - The system's used disk space per disc
-/// * `disk_free` - The system's free disk space per disc
-/// * `disk_percentage` - The system's used disk space percentage per disc
-/// * `platform` - The system's disk platform specific data
-struct DiskData {
-    disk_count: u64,
-    disk_total: Vec<u64>,
-    disk_used: Vec<u64>,
-    disk_free: Vec<u64>,
-    disk_percentage: Vec<f32>,
-    platform: Filesystem,
+/// * `count` - The system's disk count
+/// * `total` - The system's disk space per disc
+/// * `used` - The system's used disk space per disc
+/// * `free` - The system's free disk space per disc
+/// * `percentage` - The system's used disk space percentage per disc
+pub struct DiskData {
+    pub count: usize,
+    pub total: Vec<u64>,
+    pub used: Vec<u64>,
+    pub free: Vec<u64>,
+    pub percentage: Vec<f32>,
 }
 
 /// Contains the information about the system's network
 /// ### Fields
-/// * `interface_count` - The system's network interface count
-/// * `interface_names` - The system's network interface names
-/// * `interface_addresses` - The system's network interface addresses
-/// * `interface_rx` - The system's network interface received bytes per interface
-/// * `interface_tx` - The system's network interface transmitted bytes per interface
-struct NetworkData {
-    interface_count: usize,
-    interface_names: Vec<String>,
-    adresses: Vec<Vec<NetworkAddrs>>,
-    interface_rx: Vec<u64>,
-    interface_tx: Vec<u64>,
+/// * `count` - The system's network interface count
+/// * `names` - The system's network interface names
+/// * `addresses` - The system's network interface addresses
+/// * `rx` - The system's network interface received bytes per interface
+/// * `tx` - The system's network interface transmitted bytes per interface
+pub struct NetworkData {
+    pub count: usize,
+    pub names: Vec<String>,
+    pub adresses: Vec<Vec<NetworkAddrs>>,
+    pub rx: Vec<u64>,
+    pub tx: Vec<u64>,
+}
+
+pub fn start_data_fetcher() -> Result<SystemData, Box<dyn Error>> {
+    // Fetch the most recent data from the system
+    let data = fetch_data()?;
+    Ok(data)
 }
 
 
@@ -91,13 +103,18 @@ struct NetworkData {
 pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) -> Result<(), Box<dyn Error>> {
     thread::spawn(move || {
         loop {
-            let mut data: SystemData;
             // Fetch the most recent data from the system
-            fetch_data(&mut data);
-            // Update the shared data with new one
-            let mut shared_data = thr_data.lock().unwrap(); // Lock the shared data and fetch it
-            *shared_data = data;                            // Update the shared data
-            drop(shared_data);                              // Drop the lock
+            match fetch_data() {
+                Ok(data) => {
+                    // Update the shared data
+                    let mut data_lock = thr_data.lock().unwrap(); // Lock the shared data
+                    *data_lock = data; // Update the shared data
+                    drop(data_lock); // Drop the lock
+                },
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
             // Sleep for the interval
             thread::sleep(interval);
         }
@@ -105,14 +122,24 @@ pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) -> Resu
     Ok(())
 }
 
-fn fetch_data(data: &mut SystemData) -> Result<(), Box<dyn Error>> {
-    let mut system = System::new();
-    data.uptime = system.uptime()?;
-    data.cpu = get_cpu_data(&system)?;
-    data.ram = get_ram_data(&system)?;
+fn fetch_data() -> Result<SystemData, Box<dyn Error>> {
+    let system = System::new();
+    let data: SystemData = SystemData {
+        cpu: get_cpu_data(&system)?,
+        ram: get_ram_data(&system)?,
+        disk: get_disk_data(&system)?,
+        network: NetworkData {
+            count: 0,
+            names: Vec::new(),
+            adresses: Vec::new(),
+            rx: Vec::new(),
+            tx: Vec::new(),
+        },
+        uptime: system.uptime()?,
+    };
     //data.disk = get_disk_data(&mut system)?;
     //data.network = get_network_data(&mut system)?;
-    Ok(())
+    Ok(data)
 }
 
 /// Fetches the current cpu usage of the system or throws error if the fetch fails,
@@ -122,9 +149,7 @@ fn fetch_data(data: &mut SystemData) -> Result<(), Box<dyn Error>> {
 fn get_cpu_data(
     system: &System,
 ) -> Result<CPUData, Box<dyn Error>> {
-    let cpu_aggregate = system.cpu_load();
-    let cpu_agg = cpu_aggregate?;
-    let mut vec = vec![];
+    let cpu_agg = system.cpu_load()?;
     thread::sleep(Duration::from_secs(1));
     let cpu = cpu_agg.done()?;
     let mut load_vec: Vec<CPULoad> = vec![];
@@ -135,14 +160,16 @@ fn get_cpu_data(
             system: cpu[i].system,
             interrupt: cpu[i].interrupt,
             idle: cpu[i].idle,
-            platform: cpu[i].platform,
+            //platform: cpu[i].platform,
         });
     }
     let data: CPUData = CPUData {
-        cpu_count: cpu.len(),
-        cpu_load: load_vec,
-        cpu_load_average: Vec::new(),
-        cpu_temp: Vec::new(),
+        count: cpu.len(),
+        load: load_vec,
+
+        // TODO: Implement these
+        load_average: Vec::new(),
+        temp: Vec::new(),
     };
     Ok(data)
 }
@@ -151,15 +178,42 @@ fn get_cpu_data(
 /// the first index is the total memory and the second is the used memory
 /// ### Parameters
 /// * `system` - The reference to the System
-fn get_ram_data(system: &System) -> Result<RAMData, Box<dyn std::error::Error>> {
+fn get_ram_data(system: &System) -> Result<RAMData, Box<dyn Error>> {
     match system.memory() {
         Ok(mem) => {
-            let data: RAMData;
-            data.ram_total = mem.total.as_u64();
-            data.ram_free = mem.free.as_u64();
-            data.ram_used = data.ram_total - data.ram_free;
-            data.ram_percentage = data.ram_used as f32 / data.ram_total as f32 * 100_f32;
-            data.platform = mem.platform_memory;
+            let data: RAMData = RAMData {
+                total: mem.total.as_u64(),
+                used: mem.total.as_u64() - mem.free.as_u64(),
+                free: mem.free.as_u64(),
+                percentage: mem.total.as_u64() as f32 - mem.free.as_u64() as f32 / mem.total.as_u64() as f32 * 100_f32,
+                platform: mem.platform_memory,
+            };
+            Ok(data)
+        }
+        Err(x) => Err(Box::new(x)),
+    }
+}
+
+fn get_disk_data(system: &System) -> Result<DiskData, Box<dyn Error>> {
+    match system.mounts() {
+        Ok(mounts) => {
+            let mut total: Vec<u64> = Vec::new();
+            let mut used: Vec<u64> = Vec::new();
+            let mut free: Vec<u64> = Vec::new();
+            let mut percentage: Vec<f32> = Vec::new();
+            for mount in &mounts {
+                total.push(mount.total.as_u64());
+                used.push(mount.total.as_u64() - mount.avail.as_u64());
+                free.push(mount.free.as_u64());
+                percentage.push((mount.total.as_u64() - mount.avail.as_u64()) as f32 / mount.total.as_u64() as f32 * 100_f32);
+            }
+            let data: DiskData = DiskData {
+                count: mounts.len(),
+                total: total,
+                used: used,
+                free: free,
+                percentage: percentage,
+            };
             Ok(data)
         }
         Err(x) => Err(Box::new(x)),
