@@ -17,17 +17,18 @@ jobs:
           - mips
           - mipsel
     name: "Compile for Linux"
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    # runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install linker (multilib)
-      run: "sudo apt install gcc-multilib -y"
-    - name: Install linker (mips)
-      run: "sudo apt install gcc-mips-linux-gnu -y"
-    - name: Install linker (mipsel)
-      run: "sudo apt install gcc-mipsel-linux-gnu -y"
-    - name: Install linker (aarch64)
-      run: "sudo apt install gcc-aarch64-linux-gnu -y"
+    # - name: Install linker (multilib)
+    #   run: "sudo apt install gcc-multilib -y"
+    # - name: Install linker (mips)
+    #   run: "sudo apt install gcc-mips-linux-gnu -y"
+    # - name: Install linker (mipsel)
+    #   run: "sudo apt install gcc-mipsel-linux-gnu -y"
+    # - name: Install linker (aarch64)
+    #   run: "sudo apt install gcc-aarch64-linux-gnu -y"
     - name: Add Target
       run: "rustup target add ${{matrix.targetPlatform}}-unknown-linux-gnu"
     - name: Build
@@ -73,7 +74,8 @@ jobs:
 
   create-release:
     name: "Create Release"
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [build-linux, build-macos, build-windows]
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -102,7 +104,8 @@ jobs:
 
   upload: 
     name: "Upload Builds"
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: create-release
     strategy:
       matrix: 
