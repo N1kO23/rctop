@@ -5,6 +5,7 @@ use std::error::Error;
 use std::process;
 use std::thread;
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use ctrlc;
 
@@ -19,14 +20,16 @@ use crossterm::terminal::{
 use crossterm::{
     cursor::{MoveTo},
     execute,
-    event::{Event, read},
+    event::{Event, read, KeyCode},
 };
+
+use datafetcher::SystemData;
+
+const REFRESH: Duration = Duration::from_secs(1);
 
 mod ui;
 mod datafetcher;
 mod utils;
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The main function of the program
 fn main() {
@@ -34,32 +37,19 @@ fn main() {
     ui::init();
     // CTRL-C handler
     ctrlc::set_handler(move || {
-        ui::reset();
+        ui::exit();
+        process::exit(0);
     })
     .expect("Error setting Ctrl + C handler");
-
-    // Create thread for keyboard events
-    thread::spawn(|| -> crossterm::Result<()> {
-        // Loop for keyboard events
-        loop {
-            // `read()` blocks until an `Event` is available
-            match read()? {
-                Event::Key(event) => println!("{:?}", event),
-                Event::Mouse(event) => println!("{:?}", event),
-                Event::Resize(_width, _height) => execute!(stdout(), Clear(All))?,
-            }
-        }
-    });
-
 
     // Block main thread until process finishes
     match block_on(async_main()) {
         Ok(_) => {
-            ui::reset();
+            ui::exit();
             process::exit(0);
         },
         Err(e) => {
-            //ui::reset();
+            ui::exit();
             eprintln!("{}", e);
             process::exit(1);
         }
@@ -67,64 +57,101 @@ fn main() {
 }
 
 async fn async_main() -> Result<String, Box<dyn Error>> {
-    let sys = System::new();
     let mut term_size = crossterm::terminal::size()?;
+    let system_data: SystemData = datafetcher::start_data_fetcher()?;
+    let system_data_arc = Arc::new(Mutex::new(system_data));
+    let thr_data = system_data_arc.clone();
+    let thr_data_2 = system_data_arc.clone();
+    datafetcher::start_fetch(thr_data, REFRESH)?;
+
+    // thread::spawn(move ||  {
+    //     loop {
+    //         let mut data = thr_data.lock().unwrap();
+    //         *data += "Bababooey ";
+    //         drop(data);
+    //         thread::sleep(Duration::from_millis(100));
+    //     }
+    // });
+
+    // Create thread for keyboard events
+    thread::spawn(move || -> crossterm::Result<()> {
+        let thr_data2 = system_data_arc.clone();
+        let term_size = crossterm::terminal::size()?;
+        let mut selection: (usize, usize) = (0, 0);
+        // Loop for keyboard events
+        loop {
+            // `read()` blocks until an `Event` is available
+            match read()? {
+                Event::Key(event) => {
+                    println!("{:?}", event);
+                    
+                    match event.code {
+                        // Close the program gracefully
+                        KeyCode::Char('q') => {
+                            ui::exit();
+                            process::exit(0);
+                        },
+                        KeyCode::Char('c') => {
+                            ui::reset();
+                            ui::update_menu_header(&mut selection, term_size);
+                            ui::print_system_data(&thr_data2, &mut selection, term_size);
+                        },
+                        KeyCode::Up => {
+                            if selection.1 != 0 {
+                                if selection.1 != 1 {
+                                    ui::update_menu_header(&mut selection, term_size);
+                                }
+                                ui::print_system_data(&thr_data2, &mut selection, term_size);
+                            }
+                        },
+                        KeyCode::Down => {
+                            if selection.1 == 0 {
+                                ui::update_menu_header(&mut selection, term_size);
+                            }
+                            ui::print_system_data(&thr_data2, &mut selection, term_size);
+                        },
+                        KeyCode::Left => {
+                            if selection.1 == 0 {
+                                ui::update_menu_header(&mut selection, term_size);
+                                ui::print_system_data(&thr_data2, &mut selection, term_size);
+                            }
+                        },
+                        KeyCode::Right => {
+                            if selection.1 == 0 {
+                                ui::update_menu_header(&mut selection, term_size);
+                                ui::print_system_data(&thr_data2, &mut selection, term_size);
+                            }
+                        },
+                        _ => {
+                        }
+                    }
+                },
+                Event::Mouse(event) => println!("{:?}", event),
+                Event::Resize(_width, _height) => {
+                    ui::reset();
+                },
+            }
+        }
+        Ok(())
+    });
 
     for _i in 0..term_size.1 {
         print!("\n");
     }
     loop {
-        let mut top_left_str: String = String::new();
-        let mut top_right_str: String = String::new();
-        let mut bottom_left_str: String = String::new();
-        let mut bottom_right_str: String = String::new();
-        let temp_size = crossterm::terminal::size()?;
-        // If terminal has been resized, clear everything
-        if temp_size.0 != term_size.0 || temp_size.1 != term_size.1 {
-            term_size = temp_size;
-            execute!(stdout(), Clear(All))?;
-        }
-        top_left_str += &format!(
-            "RCTOP v{} [Width: {}, Height: {}]",
-            VERSION, term_size.0, term_size.1
-        );
-        let uptime = sys.uptime()?;
-        top_right_str += &format!("Uptime: {}", utils::parse_time(&uptime));
-        execute!(
-            stdout(),
-            MoveTo(0, 0),
-            Clear(CurrentLine),
-            SetBackgroundColor(Color::DarkCyan)
-        )
-        ?;
+        thread::sleep(REFRESH);
+        let sys = thr_data_2.lock().unwrap();
+        term_size = crossterm::terminal::size()?;
         print!(" ");
-        if term_size.0 > top_left_str.len() as u16 + top_right_str.len() as u16 + 1 {
-            print!("{}", top_left_str);
-            for _i in 0..(term_size.0 as usize - top_left_str.len() - top_right_str.len() - 1) {
-                print!(" ");
-            }
-            print!("{}", top_right_str);
-        }
-        else if term_size.0 > top_left_str.len() as u16 as u16 + 1 {
-            print!("{}", top_left_str);
-            for _i in 0..(term_size.0 as usize - top_left_str.len() - 1) {
-                print!(" ");
-            }
-        } else {
-            top_left_str.truncate(term_size.0 as usize + 4);
-            top_left_str += "...";
-            print!("{} ", top_left_str);
-        }
 
         execute!(stdout(), ResetColor, MoveTo(0, 2))?;
 
         // Total CPU usage is 0 at first in case of error
         let mut total_cpu: f32 = 0_f32;
-        let mut memory = vec![0, 0];
         // Fetches the CPU usage for each core and prints it
-        let cpu_usages = get_cpu_stats(&sys)?;
-        let cpu_count_string_length: usize = cpu_usages.len().to_string().len();
-        for i in 0..cpu_usages.len() {
+        let cpu_usages = &sys.cpu;
+        let cpu_count_string_length: usize = cpu_usages.count.to_string().len();
+        for i in 0..cpu_usages.count {
             execute!(stdout(), Clear(CurrentLine))?;
             print!("CPU {}:", i);
             for _j in i.to_string().len()..cpu_count_string_length + 1 {
@@ -132,41 +159,36 @@ async fn async_main() -> Result<String, Box<dyn Error>> {
             }
             print_bar(
                 term_size.0 - 8,
-                100_f32 - &cpu_usages[i][4],
+                100_f32 - &cpu_usages.load[i].idle,
                 Color::DarkGreen,
             )?;
             println!("");
             execute!(stdout(), Clear(CurrentLine))?;
             //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
             // Sum up the cpu usages
-            total_cpu += &cpu_usages[i][4];
+            total_cpu += 100_f32 - &cpu_usages.load[i].idle;
         }
         // Get total cpu usage by dividing with the core count
-        total_cpu = 100_f32 - total_cpu / cpu_usages.len() as f32;
-        // Fetches the memory usage and prints it
-        match get_mem_size(&sys) {
-            Ok(mem_size) => {
-                memory = mem_size;
-                println!(" ");
-                execute!(stdout(), Clear(CurrentLine))?;
-                print!("Memory: ");
-                print_bar(
-                    term_size.0 - 8,
-                    memory[1] as f32 / memory[0] as f32 * 100_f32,
-                    Color::DarkYellow,
-                )?;
-                println!("");
-                // execute!(stdout(), Clear(CurrentLine))?;
-                // print!("Swap: ");
-                // print_bar(
-                //     term_size.0 - 5,
-                //     memory[3] as f32 / memory[2] as f32 * 100_f32,
-                //     Color::DarkYellow,
-                // );
-                // println!("");
-            }
-            Err(x) => print!("\nMemory: error: {}", x.to_string()),
-        }
+        total_cpu = 100_f32 - total_cpu / cpu_usages.count as f32;
+
+
+        println!(" ");
+        execute!(stdout(), Clear(CurrentLine))?;
+        print!("Memory: ");
+        print_bar(
+            term_size.0 - 8,
+            sys.ram.used as f32 / sys.ram.total as f32 * 100_f32,
+            Color::DarkYellow,
+        )?;
+        println!("");
+        // execute!(stdout(), Clear(CurrentLine))?;
+        // print!("Swap: ");
+        // print_bar(
+        //     term_size.0 - 5,
+        //     memory[3] as f32 / memory[2] as f32 * 100_f32,
+        //     Color::DarkYellow,
+        // );
+        // println!("");
 
 
         //print_graph_stats(&cpu_vec, term_size.0 / 2, term_size.1 - 3, term_size.0, term_size.1);
@@ -180,14 +202,16 @@ async fn async_main() -> Result<String, Box<dyn Error>> {
         for _i in 0..term_size.0 {
             print!(" ");
         }
+        let mut bottom_left_str: String = String::new();
+        let mut bottom_right_str: String = String::new();
         bottom_left_str += &format!("CPU: {:.2}% ", total_cpu);
-        bottom_left_str += &format!("RAM: {} / {} ", utils::parse_size(&memory[1]), utils::parse_size(&memory[0]));
-        let battery = sys.battery_life()?;
-        bottom_right_str += &format!(
-            "Battery: {:.2}%, {}",
-            battery.remaining_capacity * 100.0,
-            utils::parse_time(&battery.remaining_time)
-        );
+        bottom_left_str += &format!("RAM: {} / {} ", utils::parse_size(&sys.ram.used), utils::parse_size(&sys.ram.total));
+        // let battery = sys.battery_life()?;
+        // bottom_right_str += &format!(
+        //     "Battery: {:.2}%, {}",
+        //     battery.remaining_capacity * 100.0,
+        //     utils::parse_time(&battery.remaining_time)
+        // );
         execute!(
             stdout(),
             MoveTo(0, term_size.1),
@@ -208,7 +232,7 @@ async fn async_main() -> Result<String, Box<dyn Error>> {
                 print!(" ");
             }
         } else {
-            bottom_left_str.truncate(term_size.0 as usize + 4);
+            bottom_left_str.truncate(term_size.0 as usize - 5);
             bottom_left_str += "...";
             print!("{} ", bottom_left_str);
         }
@@ -249,8 +273,7 @@ async fn async_main() -> Result<String, Box<dyn Error>> {
 // }
 
 /// Prints a bar that is as long as the percentage of the given terminal width
-/// ### Arguments
-///
+/// ### Parameters
 /// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
 fn print_bar(max_width: u16, percentage: f32, color: Color) -> Result<(), Box<dyn Error>> {
@@ -273,77 +296,4 @@ fn print_bar(max_width: u16, percentage: f32, color: Color) -> Result<(), Box<dy
     }
     execute!(stdout(), ResetColor)?;
     Ok(())
-}
-
-/// Fetches the current cpu usage of the system or throws error if the fetch fails,
-/// the first index is the cpu core and the second is the exact usage
-/// ### Arguments
-/// * `system` - The reference to the System
-/// ### Returns
-/// * `vec[0][0]` - User cpu usage
-/// * `vec[0][1]` - Nice cpu usage
-/// * `vec[0][2]` - System cpu usage
-/// * `vec[0][3]` - Interrupt cpu usage
-/// * `vec[0][4]` - Idle percentage (100_f32 - vec[0][4] = total cpu usage for core 0)
-fn get_cpu_stats(
-    system: &System,
-) -> Result<std::vec::Vec<std::vec::Vec<f32>>, Box<dyn std::error::Error>> {
-    let cpu_aggregate = system.cpu_load();
-    match cpu_aggregate {
-        Ok(cpu_agg) => {
-            let mut vec = vec![];
-            thread::sleep(Duration::from_secs(1));
-            let cpu = cpu_agg.done()?;
-            for i in 0..cpu.len() {
-                let mut vec_vec = vec![];
-                vec_vec.push(cpu[i].user * 100.0);
-                vec_vec.push(cpu[i].nice * 100.0);
-                vec_vec.push(cpu[i].system * 100.0);
-                vec_vec.push(cpu[i].interrupt * 100.0);
-                vec_vec.push(cpu[i].idle * 100.0);
-                vec.push(vec_vec);
-            }
-            Ok(vec)
-        }
-        Err(x) => Err(Box::new(x)),
-    }
-}
-
-/// Fetches the current memory usage of the system or throws error if the fetch fails,
-/// the first index is the total memory and the second is the used memory
-/// ### Arguments
-/// * `system` - The reference to the System
-/// ### Returns
-/// * `vec[0]` - Total memory
-/// * `vec[1]` - Used memory
-/// * `vec[2]` - Total swap
-/// * `vec[3]` - Used swap
-fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
-    match system.memory() {
-        Ok(mem) => {
-            // println!(
-            //     "\nMemory: {} used / {} total ({:?})",
-            //     saturating_sub_bytes(mem.total, mem.free),
-            //     mem.total,
-            //     mem.platform_memory
-            // );
-            let mut vec = vec![];
-            vec.push(mem.total.as_u64());
-            vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
-            // if mem.platform_memory.meminfo.contains_key("SwapTotal") {
-            //     match mem.platform_memory.meminfo.get("SwapTotal") {
-            //         Some(x) => vec.push(x.as_u64()),
-            //         None => (vec.push(0)),
-            //     }
-            // }
-            // if mem.platform_memory.meminfo.contains_key("SwapFree") {
-            //     match mem.platform_memory.meminfo.get("SwapFree") {
-            //         Some(x) => vec.push(x.as_u64()),
-            //         None => (vec.push(0)),
-            //     }
-            // }
-            Ok(vec)
-        }
-        Err(x) => Err(Box::new(x)),
-    }
 }
