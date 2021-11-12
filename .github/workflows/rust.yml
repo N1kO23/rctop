@@ -74,7 +74,8 @@ jobs:
 
   create-release:
     name: "Create Release"
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [build-linux, build-macos, build-windows]
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -103,7 +104,8 @@ jobs:
 
   upload: 
     name: "Upload Builds"
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: create-release
     strategy:
       matrix: 
