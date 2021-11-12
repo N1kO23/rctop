@@ -1,6 +1,7 @@
 extern crate systemstat;
 
 use std::io::stdout;
+use std::error::Error;
 use std::process;
 use std::thread;
 use std::time::Duration;
@@ -45,21 +46,29 @@ fn main() {
             match read()? {
                 Event::Key(event) => println!("{:?}", event),
                 Event::Mouse(event) => println!("{:?}", event),
-                Event::Resize(_width, _height) => execute!(stdout(), Clear(All)).unwrap(),
+                Event::Resize(_width, _height) => execute!(stdout(), Clear(All))?,
             }
         }
     });
 
 
     // Block main thread until process finishes
-    block_on(async_main());
-    // Reset the terminal view
-    ui::reset();
+    match block_on(async_main()) {
+        Ok(_) => {
+            ui::reset();
+            process::exit(0);
+        },
+        Err(e) => {
+            //ui::reset();
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
 }
 
-async fn async_main() {
+async fn async_main() -> Result<String, Box<dyn Error>> {
     let sys = System::new();
-    let mut term_size = get_term_size();
+    let mut term_size = crossterm::terminal::size()?;
 
     for _i in 0..term_size.1 {
         print!("\n");
@@ -69,29 +78,25 @@ async fn async_main() {
         let mut top_right_str: String = String::new();
         let mut bottom_left_str: String = String::new();
         let mut bottom_right_str: String = String::new();
-        let temp_size = get_term_size();
+        let temp_size = crossterm::terminal::size()?;
         // If terminal has been resized, clear everything
         if temp_size.0 != term_size.0 || temp_size.1 != term_size.1 {
             term_size = temp_size;
-            execute!(stdout(), Clear(All)).unwrap();
+            execute!(stdout(), Clear(All))?;
         }
         top_left_str += &format!(
             "RCTOP v{} [Width: {}, Height: {}]",
             VERSION, term_size.0, term_size.1
         );
-        match sys.uptime() {
-            Ok(uptime) => {
-                top_right_str += &format!("Uptime: {}", utils::parse_time(&uptime));
-            },
-            Err(_) => {}
-        }
+        let uptime = sys.uptime()?;
+        top_right_str += &format!("Uptime: {}", utils::parse_time(&uptime));
         execute!(
             stdout(),
             MoveTo(0, 0),
             Clear(CurrentLine),
             SetBackgroundColor(Color::DarkCyan)
         )
-        .unwrap();
+        ?;
         print!(" ");
         if term_size.0 > top_left_str.len() as u16 + top_right_str.len() as u16 + 1 {
             print!("{}", top_left_str);
@@ -111,51 +116,47 @@ async fn async_main() {
             print!("{} ", top_left_str);
         }
 
-        execute!(stdout(), ResetColor, MoveTo(0, 2)).unwrap();
+        execute!(stdout(), ResetColor, MoveTo(0, 2))?;
 
         // Total CPU usage is 0 at first in case of error
         let mut total_cpu: f32 = 0_f32;
         let mut memory = vec![0, 0];
         // Fetches the CPU usage for each core and prints it
-        match get_cpu_stats(&sys) {
-            Ok(cpu_usages) => {
-                let cpu_count_string_length: usize = cpu_usages.len().to_string().len();
-                for i in 0..cpu_usages.len() {
-                    execute!(stdout(), Clear(CurrentLine)).unwrap();
-                    print!("CPU {}:", i);
-                    for _j in i.to_string().len()..cpu_count_string_length + 1 {
-                        print!(" ");
-                    }
-                    print_bar(
-                        term_size.0 - 8,
-                        100_f32 - &cpu_usages[i][4],
-                        Color::DarkGreen,
-                    );
-                    println!("");
-                    execute!(stdout(), Clear(CurrentLine)).unwrap();
-                    //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
-                    // Sum up the cpu usages
-                    total_cpu += &cpu_usages[i][4];
-                }
-                // Get total cpu usage by dividing with the core count
-                total_cpu = 100_f32 - total_cpu / cpu_usages.len() as f32;
+        let cpu_usages = get_cpu_stats(&sys)?;
+        let cpu_count_string_length: usize = cpu_usages.len().to_string().len();
+        for i in 0..cpu_usages.len() {
+            execute!(stdout(), Clear(CurrentLine))?;
+            print!("CPU {}:", i);
+            for _j in i.to_string().len()..cpu_count_string_length + 1 {
+                print!(" ");
             }
-            Err(x) => print!("\nCPU usage: error: {}", x.to_string()),
+            print_bar(
+                term_size.0 - 8,
+                100_f32 - &cpu_usages[i][4],
+                Color::DarkGreen,
+            )?;
+            println!("");
+            execute!(stdout(), Clear(CurrentLine))?;
+            //println!("Load: {:.2}%", 100_f32 - &cpu_usages[i][4]);
+            // Sum up the cpu usages
+            total_cpu += &cpu_usages[i][4];
         }
+        // Get total cpu usage by dividing with the core count
+        total_cpu = 100_f32 - total_cpu / cpu_usages.len() as f32;
         // Fetches the memory usage and prints it
         match get_mem_size(&sys) {
             Ok(mem_size) => {
                 memory = mem_size;
                 println!(" ");
-                execute!(stdout(), Clear(CurrentLine)).unwrap();
+                execute!(stdout(), Clear(CurrentLine))?;
                 print!("Memory: ");
                 print_bar(
                     term_size.0 - 8,
                     memory[1] as f32 / memory[0] as f32 * 100_f32,
                     Color::DarkYellow,
-                );
+                )?;
                 println!("");
-                // execute!(stdout(), Clear(CurrentLine)).unwrap();
+                // execute!(stdout(), Clear(CurrentLine))?;
                 // print!("Swap: ");
                 // print_bar(
                 //     term_size.0 - 5,
@@ -175,29 +176,24 @@ async fn async_main() {
             Clear(CurrentLine),
             SetBackgroundColor(Color::DarkCyan)
         )
-        .unwrap();
+        ?;
         for _i in 0..term_size.0 {
             print!(" ");
         }
         bottom_left_str += &format!("CPU: {:.2}% ", total_cpu);
         bottom_left_str += &format!("RAM: {} / {} ", utils::parse_size(&memory[1]), utils::parse_size(&memory[0]));
-        match sys.battery_life() {
-            Ok(battery) => {
-                bottom_right_str += &format!(
-                    "Battery: {:.2}%, {}h{}m",
-                    battery.remaining_capacity * 100.0,
-                    battery.remaining_time.as_secs() / 3600,
-                    battery.remaining_time.as_secs() % 60
-                );
-            },
-            Err(_) => {},
-        }
+        let battery = sys.battery_life()?;
+        bottom_right_str += &format!(
+            "Battery: {:.2}%, {}",
+            battery.remaining_capacity * 100.0,
+            utils::parse_time(&battery.remaining_time)
+        );
         execute!(
             stdout(),
             MoveTo(0, term_size.1),
             Clear(CurrentLine),
             SetBackgroundColor(Color::DarkCyan)
-        ).unwrap();
+        )?;
         print!(" ");
         if term_size.0 > bottom_left_str.len() as u16 + bottom_right_str.len() as u16 + 2 {
             print!("{}", bottom_left_str);
@@ -216,22 +212,7 @@ async fn async_main() {
             bottom_left_str += "...";
             print!("{} ", bottom_left_str);
         }
-        execute!(stdout(), ResetColor).unwrap();
-    }
-}
-
-/// Returns the size of the terminal as a tuple of integers.
-/// First value is the width and the second value is the height
-fn get_term_size() -> (u16, u16) {
-    let term_size = crossterm::terminal::size();
-    match term_size {
-        Ok(size) => {
-            return size;
-        }
-        Err(e) => {
-            println!("Error while fetching terminal size: {}", e);
-            process::exit(1);
-        }
+        execute!(stdout(), ResetColor)?;
     }
 }
 
@@ -245,8 +226,8 @@ fn get_term_size() -> (u16, u16) {
 //     let mut index: usize = 0;
 //     let length = cpu_vec.len();
 //     for i in y_offset - max_height..y_offset {
-//         execute!(stdout(), MoveTo(0, i)).unwrap();
-//         execute!(stdout(), Clear(CurrentLine)).unwrap();
+//         execute!(stdout(), MoveTo(0, i))?;
+//         execute!(stdout(), Clear(CurrentLine))?;
 //     }
 //     while index < max_width.into() && index < length {
 //         let height = max_height as f32 / 100_f32 * cpu_vec[&length - 1 - &index];
@@ -255,7 +236,7 @@ fn get_term_size() -> (u16, u16) {
 //             stdout(),
 //             MoveTo(x_offset - index as u16, y_offset - max_height + floored)
 //         )
-//         .unwrap();
+//         ?;
 //         if (height - floored as f32) <= 0.33 {
 //             print!("_");
 //         } else if (height - floored as f32) <= 0.66 {
@@ -272,8 +253,8 @@ fn get_term_size() -> (u16, u16) {
 ///
 /// * `max_width` - The max width of the bar
 /// * `percentage` - The percentage of the max width the bar is going to be
-fn print_bar(max_width: u16, percentage: f32, color: Color) {
-    execute!(stdout(), SetForegroundColor(color)).unwrap();
+fn print_bar(max_width: u16, percentage: f32, color: Color) -> Result<(), Box<dyn Error>> {
+    execute!(stdout(), SetForegroundColor(color))?;
     let block_count = max_width as f32 / 100_f32 * percentage;
     let mut index: u16 = 0;
     let floored = block_count as u16;
@@ -290,7 +271,8 @@ fn print_bar(max_width: u16, percentage: f32, color: Color) {
             print!(" ");
         }
     }
-    execute!(stdout(), ResetColor).unwrap();
+    execute!(stdout(), ResetColor)?;
+    Ok(())
 }
 
 /// Fetches the current cpu usage of the system or throws error if the fetch fails,
@@ -311,7 +293,7 @@ fn get_cpu_stats(
         Ok(cpu_agg) => {
             let mut vec = vec![];
             thread::sleep(Duration::from_secs(1));
-            let cpu = cpu_agg.done().unwrap();
+            let cpu = cpu_agg.done()?;
             for i in 0..cpu.len() {
                 let mut vec_vec = vec![];
                 vec_vec.push(cpu[i].user * 100.0);
