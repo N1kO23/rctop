@@ -1,6 +1,6 @@
 extern crate systemstat;
 
-use systemstat::{saturating_sub_bytes, Platform, System, LoadAverage, PlatformCpuLoad, PlatformMemory, Filesystem, NetworkAddrs };
+use systemstat::{saturating_sub_bytes, Platform, System, LoadAverage, CPULoad, PlatformMemory, Filesystem, NetworkAddrs };
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -16,10 +16,11 @@ use std::vec::Vec;
 /// * `disk` - The system's disk data
 /// * `network` - The system's network data
 pub struct SystemData {
-    cpu: CPUData,
-    ram: RAMData,
-    disk: DiskData,
-    network: NetworkData,
+    pub cpu: CPUData,
+    pub ram: RAMData,
+    pub disk: DiskData,
+    pub network: NetworkData,
+    pub uptime: Duration,
 }
 
 /// Contains the information about the system's CPU
@@ -28,30 +29,11 @@ pub struct SystemData {
 /// * `cpu_load` - The system's CPU load per core
 /// * `cpu_load_average` - The system's CPU load average
 /// * `cpu_temp` - The system's CPU temperature per core
-/// * `platform` - The system's CPU platform specific data
 struct CPUData {
     cpu_count: usize,
-    cpu_load: Vec<CpuLoad>,
+    cpu_load: Vec<CPULoad>,
     cpu_load_average: Vec<LoadAverage>,
     cpu_temp: Vec<f32>,
-    platform: PlatformCpuLoad,
-}
-
-/// Contains the information about the CPU core's load
-/// ### Fields
-/// * `user` - The CPU core's user load
-/// * `nice` - The CPU core's nice load
-/// * `system` - The CPU core's system load
-/// * `interrupt` - The CPU core's interrupt load
-/// * `idle` - The CPU core's idle load
-/// * `total` - The CPU core's total load
-struct CpuLoad {
-    user: f32,
-    nice: f32,
-    system: f32,
-    interrupt: f32,
-    idle: f32,
-    total: f32,
 }
 
 /// Contains the information about the system's RAM
@@ -106,81 +88,79 @@ struct NetworkData {
 /// ### Parameters
 /// * `thr_data` - The shared data that the thread will use and update
 /// * `interval` - The interval in milliseconds between each data fetching
-pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) {
-    let mut system = System::new();
-    thread::spawn(move ||  {
+pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) -> Result<(), Box<dyn Error>> {
+    thread::spawn(move || {
         loop {
-            let mut data = thr_data.lock().unwrap();
-            drop(data);
-            thread::sleep(Duration::from_millis(100));
+            let mut data: SystemData;
+            // Fetch the most recent data from the system
+            fetch_data(&mut data);
+            // Update the shared data with new one
+            let mut shared_data = thr_data.lock().unwrap(); // Lock the shared data and fetch it
+            *shared_data = data;                            // Update the shared data
+            drop(shared_data);                              // Drop the lock
+            // Sleep for the interval
+            thread::sleep(interval);
         }
     });
+    Ok(())
+}
+
+fn fetch_data(data: &mut SystemData) -> Result<(), Box<dyn Error>> {
+    let mut system = System::new();
+    data.uptime = system.uptime()?;
+    data.cpu = get_cpu_data(&system)?;
+    data.ram = get_ram_data(&system)?;
+    //data.disk = get_disk_data(&mut system)?;
+    //data.network = get_network_data(&mut system)?;
+    Ok(())
 }
 
 /// Fetches the current cpu usage of the system or throws error if the fetch fails,
 /// the first index is the cpu core and the second is the exact usage
 /// ### Parameters
 /// * `system` - The reference to the System
-/// ### Returns
-/// * `vec[0][0]` - User cpu usage
-/// * `vec[0][1]` - Nice cpu usage
-/// * `vec[0][2]` - System cpu usage
-/// * `vec[0][3]` - Interrupt cpu usage
-/// * `vec[0][4]` - Idle percentage (100_f32 - vec[0][4] = total cpu usage for core 0)
-fn get_cpu_stats(
+fn get_cpu_data(
     system: &System,
-) -> Result<std::vec::Vec<std::vec::Vec<f32>>, Box<dyn Error>> {
+) -> Result<CPUData, Box<dyn Error>> {
     let cpu_aggregate = system.cpu_load();
     let cpu_agg = cpu_aggregate?;
     let mut vec = vec![];
     thread::sleep(Duration::from_secs(1));
     let cpu = cpu_agg.done()?;
+    let mut load_vec: Vec<CPULoad> = vec![];
     for i in 0..cpu.len() {
-        let mut vec_vec = vec![];
-        vec_vec.push(cpu[i].user * 100.0);
-        vec_vec.push(cpu[i].nice * 100.0);
-        vec_vec.push(cpu[i].system * 100.0);
-        vec_vec.push(cpu[i].interrupt * 100.0);
-        vec_vec.push(cpu[i].idle * 100.0);
-        vec.push(vec_vec);
+        load_vec.push(CPULoad {
+            user: cpu[i].user,
+            nice: cpu[i].nice,
+            system: cpu[i].system,
+            interrupt: cpu[i].interrupt,
+            idle: cpu[i].idle,
+            platform: cpu[i].platform,
+        });
     }
-    Ok(vec)
+    let data: CPUData = CPUData {
+        cpu_count: cpu.len(),
+        cpu_load: load_vec,
+        cpu_load_average: Vec::new(),
+        cpu_temp: Vec::new(),
+    };
+    Ok(data)
 }
 
 /// Fetches the current memory usage of the system or throws error if the fetch fails,
 /// the first index is the total memory and the second is the used memory
 /// ### Parameters
 /// * `system` - The reference to the System
-/// ### Returns
-/// * `vec[0]` - Total memory
-/// * `vec[1]` - Used memory
-/// * `vec[2]` - Total swap
-/// * `vec[3]` - Used swap
-fn get_mem_size(system: &System) -> Result<std::vec::Vec<u64>, Box<dyn std::error::Error>> {
+fn get_ram_data(system: &System) -> Result<RAMData, Box<dyn std::error::Error>> {
     match system.memory() {
         Ok(mem) => {
-            // println!(
-            //     "\nMemory: {} used / {} total ({:?})",
-            //     saturating_sub_bytes(mem.total, mem.free),
-            //     mem.total,
-            //     mem.platform_memory
-            // );
-            let mut vec = vec![];
-            vec.push(mem.total.as_u64());
-            vec.push(saturating_sub_bytes(mem.total, mem.free).as_u64());
-            // if mem.platform_memory.meminfo.contains_key("SwapTotal") {
-            //     match mem.platform_memory.meminfo.get("SwapTotal") {
-            //         Some(x) => vec.push(x.as_u64()),
-            //         None => (vec.push(0)),
-            //     }
-            // }
-            // if mem.platform_memory.meminfo.contains_key("SwapFree") {
-            //     match mem.platform_memory.meminfo.get("SwapFree") {
-            //         Some(x) => vec.push(x.as_u64()),
-            //         None => (vec.push(0)),
-            //     }
-            // }
-            Ok(vec)
+            let data: RAMData;
+            data.ram_total = mem.total.as_u64();
+            data.ram_free = mem.free.as_u64();
+            data.ram_used = data.ram_total - data.ram_free;
+            data.ram_percentage = data.ram_used as f32 / data.ram_total as f32 * 100_f32;
+            data.platform = mem.platform_memory;
+            Ok(data)
         }
         Err(x) => Err(Box::new(x)),
     }
