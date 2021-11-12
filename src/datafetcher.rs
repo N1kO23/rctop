@@ -1,8 +1,125 @@
 extern crate systemstat;
-use systemstat::{saturating_sub_bytes, Platform, System};
 
-pub fn fetch() {
-    let mut stat = System::new();
+use systemstat::{saturating_sub_bytes, Platform, System, PlatformCpuLoad, PlatformMemory, Filesystem, NetworkAddrs };
+
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+use std::error::Error;
+use std::vec::Vec;
+
+
+/// Contains the information about the system
+/// ### Fields
+/// * `cpu` - The system's CPU data
+/// * `ram` - The system's memory data
+/// * `disk` - The system's disk data
+/// * `network` - The system's network data
+pub struct SystemData {
+    cpu: CPUData,
+    ram: RAMData,
+    disk: DiskData,
+    network: NetworkData,
+}
+
+/// Contains the information about the system's CPU
+/// ### Fields
+/// * `cpu_count` - The system's CPU core count
+/// * `cpu_load` - The system's CPU load per core
+/// * `cpu_temp` - The system's CPU temperature per core
+/// * `platform` - The system's CPU platform data
+struct CPUData {
+    cpu_count: usize,
+    cpu_usage: Vec<f32>,
+    cpu_temp: Vec<f32>,
+    platform: PlatformCpuLoad,
+}
+
+/// Contains the information about the system's RAM
+/// ### Fields
+/// * `ram_total` - The system's total RAM
+/// * `ram_used` - The system's used RAM
+/// * `ram_free` - The system's free RAM
+/// * `ram_percentage` - The system's used RAM percentage
+/// * `platform` - The system's RAM platform data
+struct RAMData {
+    ram_total: u64,
+    ram_used: u64,
+    ram_free: u64,
+    ram_percentage: f32,
+    platform: PlatformMemory,
+}
+
+/// Contains the information about the system's disk
+/// ### Fields
+/// * `disk_count` - The system's disk count
+/// * `disk_total` - The system's disk space per disc
+/// * `disk_used` - The system's used disk space per disc
+/// * `disk_free` - The system's free disk space per disc
+/// * `disk_percentage` - The system's used disk space percentage per disc
+/// * `platform` - The system's disk platform data
+struct DiskData {
+    disk_count: u64,
+    disk_total: Vec<u64>,
+    disk_used: Vec<u64>,
+    disk_free: Vec<u64>,
+    disk_percentage: Vec<f32>,
+    platform: Filesystem,
+}
+
+/// Contains the information about the system's network
+/// ### Fields
+/// * `interface_count` - The system's network interface count
+/// * `interface_names` - The system's network interface names
+/// * `interface_addresses` - The system's network interface addresses
+/// * `interface_rx` - The system's network interface received bytes per interface
+/// * `interface_tx` - The system's network interface transmitted bytes per interface
+struct NetworkData {
+    interface_count: usize,
+    interface_names: Vec<String>,
+    adresses: Vec<Vec<NetworkAddrs>>,
+    interface_rx: Vec<u64>,
+    interface_tx: Vec<u64>,
+}
+
+pub fn start_fetch(thr_data: Arc<Mutex<SystemData>>, interval: Duration) {
+    thread::spawn(move ||  {
+        loop {
+            let mut data = thr_data.lock().unwrap();
+            drop(data);
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+}
+
+/// Fetches the current cpu usage of the system or throws error if the fetch fails,
+/// the first index is the cpu core and the second is the exact usage
+/// ### Arguments
+/// * `system` - The reference to the System
+/// ### Returns
+/// * `vec[0][0]` - User cpu usage
+/// * `vec[0][1]` - Nice cpu usage
+/// * `vec[0][2]` - System cpu usage
+/// * `vec[0][3]` - Interrupt cpu usage
+/// * `vec[0][4]` - Idle percentage (100_f32 - vec[0][4] = total cpu usage for core 0)
+fn get_cpu_stats(
+    system: &System,
+) -> Result<std::vec::Vec<std::vec::Vec<f32>>, Box<dyn Error>> {
+    let cpu_aggregate = system.cpu_load();
+    let cpu_agg = cpu_aggregate?;
+    let mut vec = vec![];
+    thread::sleep(Duration::from_secs(1));
+    let cpu = cpu_agg.done()?;
+    for i in 0..cpu.len() {
+        let mut vec_vec = vec![];
+        vec_vec.push(cpu[i].user * 100.0);
+        vec_vec.push(cpu[i].nice * 100.0);
+        vec_vec.push(cpu[i].system * 100.0);
+        vec_vec.push(cpu[i].interrupt * 100.0);
+        vec_vec.push(cpu[i].idle * 100.0);
+        vec.push(vec_vec);
+    }
+    Ok(vec)
 }
         
         // match sys.mounts() {
