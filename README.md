@@ -1,4 +1,5 @@
 # What is it?
+[![Build rctop](https://github.com/N1kO23/rctop/actions/workflows/rust.yml/badge.svg)](https://github.com/N1kO23/rctop/actions/workflows/rust.yml)
 
 RCTOP is a simple WIP system monitoring app that runs purely on terminal and doesn't feature GUI. One can compare it to htop, but more stripped down. RCTOP is fully coded in Rust.
 
